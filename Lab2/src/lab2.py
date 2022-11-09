@@ -139,8 +139,8 @@ class Lab2:
         ### Drive to target
         print('Driving')
         print(distance)
-        self.drive(distance,0.5)
-        #self.smooth_drive(distance,2)
+        #self.drive(distance,0.5)
+        self.smooth_drive(distance,2)
         ### Rotate to face the waypoints direction        
         self.rotate(self.normalize_angle(waypointYaw-self.pth),1)
         ### Correct Error if it is too large
@@ -183,21 +183,23 @@ class Lab2:
         oldX=self.px
         oldY=self.py
         error=distance
-        kp=0.01
-        ki=0.001
+        kp=0.3
+        ki=0.005
         errorACC=0
 
-        while(error>0.05 or effort>0.1):
-            error=math.sqrt(math.pow(self.px-oldX,2)+math.pow(self.py-oldY,2))
+        while(abs(error>0.05) or effort>0.01):
+            error=distance-math.sqrt(math.pow(self.px-oldX,2)+math.pow(self.py-oldY,2))
             effort=kp*error+ki*errorACC
+            print("Effort is")
+            print(effort)
+            print(error)
             errorACC=error+errorACC
             if effort>linear_speed:
                 effort=linear_speed
             self.send_speed(effort,0)
-            print(effort)
             rospy.sleep(0.05)
         self.send_speed(0,0)
-
+        print("Finished Smooth Drive")
 
     def run(self):
         rospy.sleep(0.5)
