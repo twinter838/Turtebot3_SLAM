@@ -90,10 +90,8 @@ class Lab2:
         while abs(self.pth-angle) > 0.1:
             angle=self.normalize_angle(angle)
             if(angle>angleOld):
-                print('Turning Left')
                 self.send_speed(0,aspeed)
             if(angle<angleOld):
-                print("Turning Right")
                 self.send_speed(0,-aspeed)
             rospy.sleep(0.1)
         self.send_speed(0,0)
@@ -119,6 +117,7 @@ class Lab2:
         :param msg [PoseStamped] The target pose.
         """
         ### REQUIRED CREDIT
+        ### Take in the pose from move_base_simple/goal and save it in the function
         waypointX=  msg.pose.position.x
         waypointY = msg.pose.position.y
         quat_orig = msg.pose.orientation
@@ -128,24 +127,23 @@ class Lab2:
         print(waypointX)
         print(waypointY)
         print(waypointYaw)
+        ### Calculate distance and angle to waypoint
         distance=math.sqrt(math.pow(self.px-waypointX,2)+math.pow(self.py-waypointY,2))
         print(distance)
         yawAngle=math.atan2(waypointY-self.py,waypointX-self.px)
+        ### Rotate to target
         print("Rotating")
         print(yawAngle)
-        self.rotate(yawAngle,1)
+        self.rotate(self.normalize_angle(yawAngle-self.pth),1)
         rospy.sleep(2)
+        ### Drive to target
         print('Driving')
         print(distance)
-        self.drive(distance,0.5)        
-        self.rotate(waypointYaw-self.pth,1)
-        if(abs(waypointX-self.px)>0.3 and abs(waypointY-self.py>0.3)):
-            print("Running Recursively to Correct Error")
-            self.go_to(msg)
-        
-
-
-
+        self.drive(distance,0.5)
+        #self.smooth_drive(distance,2)
+        ### Rotate to face the waypoints direction        
+        self.rotate(self.normalize_angle(waypointYaw-self.pth),1)
+        ### Correct Error if it is too large
     def update_odometry(self, msg):
         """
         Updates the current pose of the robot.
@@ -180,10 +178,25 @@ class Lab2:
         :param distance     [float] [m]   The distance to cover.
         :param linear_speed [float] [m/s] The maximum forward linear speed.
         """
-        ### EXTRA CREDIT
-        # TODO
-        pass # delete this when you implement your code
 
+        ### EXTRA CREDIT
+        oldX=self.px
+        oldY=self.py
+        error=distance
+        kp=0.01
+        ki=0.001
+        errorACC=0
+
+        while(error>0.05 or effort>0.1):
+            error=math.sqrt(math.pow(self.px-oldX,2)+math.pow(self.py-oldY,2))
+            effort=kp*error+ki*errorACC
+            errorACC=error+errorACC
+            if effort>linear_speed:
+                effort=linear_speed
+            self.send_speed(effort,0)
+            print(effort)
+            rospy.sleep(0.05)
+        self.send_speed(0,0)
 
 
     def run(self):
