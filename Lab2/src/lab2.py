@@ -30,7 +30,7 @@ class Lab2:
         ### Tell ROS that this node subscribes to PoseStamped messages on the '/move_base_simple/goal' topic
         ### When a message is received, call self.go_to
         # TODO
-        rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.go_to)
+        rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.arc_to)
         # delete this when you implement your code
 
 
@@ -167,9 +167,52 @@ class Lab2:
         :param msg [PoseStamped] The target pose.
         """
         ### EXTRA CREDIT
-        # TODO
-        pass # delete this when you implement your code
+        print("Starting Arc to")
+        #PID values
+        KpHeading = 0.5
+        KiHeading = 0.005
+        KpDistance = 0.1
+        KiDistance = 0.005
 
+        errorThetaAcc = 0
+        errorDistanceAcc = 0
+
+        waypointX = position.pose.position.x
+        waypointY = position.pose.position.y
+
+        quat_orig = position.pose.orientation
+        quat_list = [quat_orig.x, quat_orig.y, quat_orig.z, quat_orig.w]
+        errorDistance = math.sqrt(math.pow(waypointX - self.px,2) + math.pow(waypointY - self.py,2))
+        (roll , pitch , yaw) = euler_from_quaternion(quat_list)
+        waypointYaw = yaw
+        while(errorDistance) > 0.05:
+            #Errors
+            errorTheta = self.normalize_angle(self.normalize_angle_positive(math.atan2((waypointY - self.py),(waypointX - self.px))) - self.normalize_angle_positive(self.pth))
+
+            errorDistance = math.sqrt(math.pow(waypointX - self.px,2) + math.pow(waypointY - self.py,2))
+
+            #Efforts
+            effortTheta = (errorTheta * KpHeading) + (KiHeading * errorThetaAcc)
+            effortDistance = (errorDistance * KpDistance) + (KiDistance * errorDistanceAcc)
+            
+            #Acceleration Errors
+            errorThetaAcc=errorTheta+errorThetaAcc
+            errorDistanceAcc=errorDistance+errorDistanceAcc
+            
+            self.send_speed(effortDistance,effortTheta)
+
+            print("Effort Theta")
+            print(effortTheta)
+            print("Effort Distance")
+            print(effortDistance)
+            print("Error Theta")
+            print(errorTheta)
+            print("Error Distance")
+            print(errorDistance)
+
+            rospy.sleep(0.05)
+
+        self.send_speed(0,0)
 
 
     def smooth_drive(self, distance, linear_speed):
