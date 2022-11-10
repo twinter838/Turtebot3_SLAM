@@ -22,6 +22,7 @@ class PathPlanner:
         ## Create a new service called "plan_path" that accepts messages of
         ## type GetPlan and calls self.plan_path() when a message is received
         # TODO
+        plan_path=rospy.service('plan_path',GetPlan,self.plan_path)
         ## Create a publisher for the C-space (the enlarged occupancy grid)
         ## The topic is "/path_planner/cspace", the message type is GridCells
         # TODO
@@ -34,7 +35,35 @@ class PathPlanner:
         rospy.sleep(1.0)
         rospy.loginfo("Path planner node ready")
 
+    """
+    NOTES: from the lab document
 
+    Consider that the origin (0, 0) point of the map is likely different from the robot
+    Rotations will not be needed in this lab
+
+    We need to look in the yaml files for the resolution of a cell in the real world
+    (Pass the message?)
+    MAPData is passed
+
+    Message type of OccupancyMap has field info that holds the nav_msgs/MapMetaData, with the width height and position of origin 
+    (how does it describe where it's origin is)
+    Go through the psuedocode
+
+    For Cell coordinate to World coordinates be aware the the translation error is liekly going to be (Cell resolution) / 2 due to... 
+    ... look at the sketchbook example
+
+    World to cell with also have the issue of translation with cellres/2 being the error 
+
+    For Calculating the C space, the initial occupancy grid is passed by the map server and then we calculate the C space
+    we may need to ceiling some of the calculations due to if we round down we may not create the proper buffer.
+
+    Implementing A star will take in our current occupancy map after adding C space and use wave method (confirmed that's what a star is)
+    Possibly implement early exit? (The code ends and returns a path when it finds the end)
+
+    
+
+
+    """
 
     @staticmethod
     def grid_to_index(mapdata, x, y):
@@ -45,7 +74,8 @@ class PathPlanner:
         :return  [int] The index.
         """
         ### REQUIRED CREDIT
-        pass
+           
+        return (y * mapdata.width) + x
 
 
 
@@ -60,7 +90,7 @@ class PathPlanner:
         :return   [float]        The distance.
         """
         ### REQUIRED CREDIT
-        pass
+        return(math.sqrt(math.pow(x1-x2,2)+math.pow(y1-y2,2)))
         
 
 
@@ -74,8 +104,10 @@ class PathPlanner:
         :return        [Point]         The position in the world.
         """
         ### REQUIRED CREDIT
-        pass
+        wx = (x + 0.5) * mapdata.resolution + mapdata.Pose.position.x
+        wy = (y + 0.5) * mapdata.resolution + mapdata.Pose.position.y
 
+        return Point(wx,wy)
 
         
     @staticmethod
@@ -87,8 +119,11 @@ class PathPlanner:
         :return        [(int,int)]     The cell position as a tuple.
         """
         ### REQUIRED CREDIT
-        pass
-
+        
+        ## we do have a template, and the translation will be cellred/2 likely
+        x = int(wp.x - mapdata.Pose.position.x) / mapdata.resolution
+        y = int(wp.y - mapdata.Pose.position.y) / mapdata.resolution
+        return(x,y)
 
         
     @staticmethod

@@ -1,0 +1,20 @@
+<launch>
+
+  
+  <node name="Drive" pkg="Lab3" type="drive.py"/>
+  <node name="map_server" pkg="map_server" type="map_server" args="$(find Lab3)/maps/simple_map.yaml"/>
+  <node name="static_transform_publisher" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0 /map /odom 100"/>
+  
+  <arg name="isSimulation" default="true" /> 
+  <group if="$(arg isSimulation)">
+   <include file="$(find Lab3)/launch/turtlebot3_gazebo_rviz.launch"/>
+   <include file="$(find turtlebot3_gazebo)/launch/turtlebot3_empty_world.launch"/>   
+  </group>
+  
+  
+  <group unless="$(arg isSimulation)">
+    <include file="$(find turtlebot3_bringup)/launch/turtlebot3_model.launch"/>
+  </group>
+  
+  
+</launch>

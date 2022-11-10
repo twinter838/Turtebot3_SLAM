@@ -19,7 +19,7 @@ class Lab2:
         self.py=0
         self.px=0
         self.pth=0
-        rospy.init_node('Lab2')
+        rospy.init_node('Drive')
         ### Tell ROS that this node publishes Twist messages on the '/cmd_vel' topic
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         # TODO
