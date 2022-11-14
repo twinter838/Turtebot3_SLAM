@@ -2,10 +2,11 @@
 
 import math
 import rospy
+import string
 from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
 from geometry_msgs.msg import Point, Pose, PoseStamped
-
+from priority_queue import PriorityQueue
 
 
 class PathPlanner:
@@ -30,6 +31,9 @@ class PathPlanner:
         ## Create publishers for A* (expanded cells, frontier, ...)
         ## Choose a the topic names, the message type is GridCells
         # TODO
+        self.pub_Frontier = rospy.Publisher('/path_planner/frontier', GridCells, queue_size=10)
+        self.pub_Path = rospy.Publisher('/path_planner/path', GridCells, queue_size=10)
+
         ## Initialize the request counter
         # TODO
         ## Sleep to allow roscore to do some housekeeping
@@ -87,8 +91,8 @@ class PathPlanner:
         :return y [int] The cell Y coordinate.
         """
         ### REQUIRED CREDIT
-        x=math.fmod(index , mapdata.info.width)
-        y=math.floor(index/mapdata.info.width)
+        x = index % mapdata.info.width
+        y = index // mapdata.info.width
         return x,y
 
 
@@ -164,7 +168,11 @@ class PathPlanner:
         :return        [boolean]       True if the cell is walkable, False otherwise
         """
         ### REQUIRED CREDIT
-        pass
+        
+        if(PathPlanner.grid_to_index(x,y)==100 or x > mapdata.info.width or y > mapdata.info.height):
+            return False
+        return True
+         
 
                
 
@@ -178,8 +186,15 @@ class PathPlanner:
         :return        [[(int,int)]]   A list of walkable 4-neighbors.
         """
         ### REQUIRED CREDIT
-        pass
+        walkableCells=[]
+        neighbors_of_4 = [ (x,y+1),(x,y-1),(x+1,y),(x-1,y)]
+        
+        for neighbor in neighbors_of_4 :
 
+            if(PathPlanner.is_cell_walkable(mapdata,neighbor[0],neighbor[1])):
+                walkableCells.append(neighbor)
+
+        return walkableCells
     
     
     @staticmethod
@@ -192,8 +207,15 @@ class PathPlanner:
         :return        [[(int,int)]]   A list of walkable 8-neighbors.
         """
         ### REQUIRED CREDIT
-        pass
+        walkableCells=[]
+        neighbors_of_8 = [ (x,y+1),(x,y-1),(x+1,y),(x-1,y),(x+1,y+1),(x-1,y-1),(x+1,y-1),(x-1,y+1)]
+        
+        for neighbor in neighbors_of_8 :
 
+            if(PathPlanner.is_cell_walkable(mapdata,neighbor[0],neighbor[1])):
+                walkableCells.append(neighbor)
+
+        return walkableCells
     
     
     @staticmethod
@@ -226,53 +248,58 @@ class PathPlanner:
 
         mapWidth = mapdata.info.width
         mapHeight = mapdata.info.height
+
         for i, j in enumerate(mapdata.data):
             if(j == 100): ## If it's occupied
-                rospy.loginfo("Gay Baby")
+                # rospy.loginfo("Gay Baby")
 
                 k = -padding ## starts the padding at negative y iterator
                 l = -padding ## x iterator
 
                 point = PathPlanner.index_to_grid(mapdata, i)
-
+                pointX = point[0]
+                pointY = point[1]
                 
-                while(k < padding + 1): ## If k == padding, it would end up being false in k < padding
-                    rospy.loginfo("Gayer Baby")
+                for k in range(-padding, padding, 1): ## If k == padding, it would end up being false in k < padding
+                    ## rospy.loginfo("Gayer Baby")
+                    workingY = pointX + k
                 
-                    while(l < padding + 1) :
-                        rospy.loginfo("Gayest Baby")
-                        
+                    for l in range(-padding, padding, 1):
+                        ## rospy.loginfo("Gayest Baby")
+                        workingX = pointX + l
                         ##Stil working here, building a helper, give me a bit
-                        if point[0] + l >= 0 and point[0] + l < mapWidth:
-                            if point[1] + k >= 0 and point[1] + k < mapHeight:
-                                index = int(PathPlanner.grid_to_index(mapdata, point[0] + l, point[1] + k))
-                                CSpace[index] = 100
-                                    
-                        l = l+1 ## iterate
+                        
+                        if workingY in range(0, mapWidth):
 
-                    k = k+1 ## iterate
+                            if workingX in range(0, mapWidth):
+                                index = PathPlanner.grid_to_index(mapdata, (pointX + l), (pointY + k))
+                                CSpace[index] = 100
+                                printThis = str(workingX) + ' ' + str(workingY)
+                                rospy.loginfo(printThis)
+                        ## iterate
+                ## iterate
+                
                 
         rospy.loginfo("THIS BABY IS THE ENTIRE AGENDA")
         CSpace = tuple(CSpace)
 
         ## Create a GridCells message and publish it
-        Msg_GridCells=GridCells()
-        Msg_GridCells.cell_height=mapdata.info.resolution
-        Msg_GridCells.cell_width=mapdata.info.resolution
-        GridCell_Coord=[]
+        Msg_GridCells = GridCells()
+        Msg_GridCells.cell_height = mapdata.info.resolution
+        Msg_GridCells.cell_width = mapdata.info.resolution
+        GridCell_Coord = []
         ## For occupied grids in the Cspace array, convert them to world coordnates and then add them to the array of points to be passed to the gridcells message
         for i, j in enumerate(CSpace):
                 if(j == 100):
                     gridCoord = PathPlanner.index_to_grid(mapdata, i)
                     pointWC = PathPlanner.grid_to_world(mapdata, gridCoord[0], gridCoord[1])
-                    point = Point()
-                    # point.x = WC.x
-                    # point.y = WC.y
-                    # point.z = 0
-                    point = pointWC
-                    GridCell_Coord.append(point)
-                    
+                    # # point.x WC.x0]
+                    # # point.y = WC.y
+                    # # point.z = 0
+                    GridCell_Coord.append(pointWC)     
+
         Msg_GridCells.cells = GridCell_Coord
+        Msg_GridCells.header.frame_id = ('map')
         self.pub_CSpace.publish(Msg_GridCells)        
         ## Return the C-space
         CspaceOG = OccupancyGrid()
@@ -284,6 +311,27 @@ class PathPlanner:
     
     def a_star(self, mapdata, start, goal):
         ### REQUIRED CREDIT
+        frontier = PriorityQueue()
+        frontier.put(start,0)
+        came_from = []
+        cost_so_far = []
+        came_from[start] = None
+        cost_so_far[start] = 0
+
+        while not frontier.empty():
+            current = frontier.get()
+
+            if current == goal:
+                break
+            neighbors=PathPlanner.neighbors_of_8(mapdata,current[0], current[1])
+            for next in neighbors(current):
+                new_cost = cost_so_far[current] + PathPlanner.euclidean_distance(current[0], current[1], next[0], next[1])
+                if next not in cost_so_far or new_cost < cost_so_far[next]:
+                    cost_so_far[next] = new_cost
+                    priority = new_cost + PathPlanner.euclidean_distance(goal[0],goal[1],next[0],next[1])
+                    frontier.put(next, priority)
+                    came_from[next] = current
+        
         rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
 
 

@@ -30,7 +30,7 @@ class Lab2:
         ### Tell ROS that this node subscribes to PoseStamped messages on the '/move_base_simple/goal' topic
         ### When a message is received, call self.go_to
         # TODO
-        rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.arc_to)
+        rospy.Subscriber('/move_base_simple/goal', PoseStamped)
         # delete this when you implement your code
 
 
