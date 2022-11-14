@@ -22,10 +22,11 @@ class PathPlanner:
         ## Create a new service called "plan_path" that accepts messages of
         ## type GetPlan and calls self.plan_path() when a message is received
         # TODO
-        plan_path=rospy.service('plan_path',GetPlan,self.plan_path)
+        plan_path=rospy.Service('plan_path',GetPlan,self.plan_path)
         ## Create a publisher for the C-space (the enlarged occupancy grid)
         ## The topic is "/path_planner/cspace", the message type is GridCells
         # TODO
+        self.pub_CSpace = rospy.Publisher('/path_planner/cspace', GridCells, queue_size=10)
         ## Create publishers for A* (expanded cells, frontier, ...)
         ## Choose a the topic names, the message type is GridCells
         # TODO
@@ -75,8 +76,20 @@ class PathPlanner:
         """
         ### REQUIRED CREDIT
            
-        return (y * mapdata.width) + x
-
+        return (y * mapdata.info.width) + x
+   
+    @staticmethod
+    def index_to_grid(mapdata, index):
+        """
+        Returns the index corresponding to the given (x,y) coordinates in the occupancy grid.
+        :param  [int] The index.
+        :return x [int] The cell X coordinate.
+        :return y [int] The cell Y coordinate.
+        """
+        ### REQUIRED CREDIT
+        x=math.fmod(index , mapdata.info.width)
+        y=math.floor(index/mapdata.info.width)
+        return x,y
 
 
     @staticmethod
@@ -104,10 +117,10 @@ class PathPlanner:
         :return        [Point]         The position in the world.
         """
         ### REQUIRED CREDIT
-        wx = (x + 0.5) * mapdata.resolution + mapdata.Pose.position.x
-        wy = (y + 0.5) * mapdata.resolution + mapdata.Pose.position.y
+        wx = (x + 0.5) * mapdata.info.resolution + mapdata.info.origin.position.x
+        wy = (y + 0.5) * mapdata.info.resolution + mapdata.info.origin.position.y
 
-        return Point(wx,wy)
+        return Point(wx,wy,0)
 
         
     @staticmethod
@@ -121,8 +134,8 @@ class PathPlanner:
         ### REQUIRED CREDIT
         
         ## we do have a template, and the translation will be cellred/2 likely
-        x = int(wp.x - mapdata.Pose.position.x) / mapdata.resolution
-        y = int(wp.y - mapdata.Pose.position.y) / mapdata.resolution
+        x = int(wp.x - mapdata.info.origin.position.x) / mapdata.info.resolution
+        y = int(wp.y - mapdata.info.origin.position.y) / mapdata.info.resolution
         return(x,y)
 
         
@@ -192,7 +205,8 @@ class PathPlanner:
         """
         ### REQUIRED CREDIT
         rospy.loginfo("Requesting the map")
-
+        mapdata=rospy.wait_for_message('/map',OccupancyGrid)
+        return mapdata
 
 
     def calc_cspace(self, mapdata, padding):
@@ -206,13 +220,66 @@ class PathPlanner:
         ### REQUIRED CREDIT
         rospy.loginfo("Calculating C-Space")
         ## Go through each cell in the occupancy grid
-        ## Inflate the obstacles where necessary
-        # TODO
-        ## Create a GridCells message and publish it
-        # TODO
-        ## Return the C-space
-        pass
+        ## Inflate the obstacles where necessary     
+        CSpace = mapdata.data
+        CSpace = list(CSpace)
 
+        mapWidth = mapdata.info.width
+        mapHeight = mapdata.info.height
+        for i, j in enumerate(mapdata.data):
+            if(j == 100): ## If it's occupied
+                rospy.loginfo("Gay Baby")
+
+                k = -padding ## starts the padding at negative y iterator
+                l = -padding ## x iterator
+
+                point = PathPlanner.index_to_grid(mapdata, i)
+
+                
+                while(k < padding + 1): ## If k == padding, it would end up being false in k < padding
+                    rospy.loginfo("Gayer Baby")
+                
+                    while(l < padding + 1) :
+                        rospy.loginfo("Gayest Baby")
+                        
+                        ##Stil working here, building a helper, give me a bit
+                        if point[0] + l >= 0 and point[0] + l < mapWidth:
+                            if point[1] + k >= 0 and point[1] + k < mapHeight:
+                                index = int(PathPlanner.grid_to_index(mapdata, point[0] + l, point[1] + k))
+                                CSpace[index] = 100
+                                    
+                        l = l+1 ## iterate
+
+                    k = k+1 ## iterate
+                
+        rospy.loginfo("THIS BABY IS THE ENTIRE AGENDA")
+        CSpace = tuple(CSpace)
+
+        ## Create a GridCells message and publish it
+        Msg_GridCells=GridCells()
+        Msg_GridCells.cell_height=mapdata.info.resolution
+        Msg_GridCells.cell_width=mapdata.info.resolution
+        GridCell_Coord=[]
+        ## For occupied grids in the Cspace array, convert them to world coordnates and then add them to the array of points to be passed to the gridcells message
+        for i, j in enumerate(CSpace):
+                if(j == 100):
+                    gridCoord = PathPlanner.index_to_grid(mapdata, i)
+                    pointWC = PathPlanner.grid_to_world(mapdata, gridCoord[0], gridCoord[1])
+                    point = Point()
+                    # point.x = WC.x
+                    # point.y = WC.y
+                    # point.z = 0
+                    point = pointWC
+                    GridCell_Coord.append(point)
+                    
+        Msg_GridCells.cells = GridCell_Coord
+        self.pub_CSpace.publish(Msg_GridCells)        
+        ## Return the C-space
+        CspaceOG = OccupancyGrid()
+        CspaceOG.data = CSpace
+        CspaceOG.info = mapdata.info
+        
+        return CspaceOG
 
     
     def a_star(self, mapdata, start, goal):
@@ -272,6 +339,11 @@ class PathPlanner:
         """
         Runs the node until Ctrl-C is pressed.
         """
+        rospy.sleep(0.5)
+        mapdata=PathPlanner.request_map()
+        while(1==1):
+            self.calc_cspace(mapdata,1)
+            rospy.sleep(0.5)
         rospy.spin()
 
 
