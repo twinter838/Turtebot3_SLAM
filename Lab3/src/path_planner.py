@@ -32,7 +32,8 @@ class PathPlanner:
         ## Choose a the topic names, the message type is GridCells
         # TODO
         self.pub_Frontier = rospy.Publisher('/path_planner/frontier', GridCells, queue_size=10)
-        self.pub_Path = rospy.Publisher('/path_planner/path', GridCells, queue_size=10)
+        self.pub_Path = rospy.Publisher('/path_planner/path', Path, queue_size=10)
+        self.pub_waveFront = rospy.Publisher('/path_planner/path',GridCells,queue_size=10)
 
         ## Initialize the request counter
         # TODO
@@ -269,7 +270,7 @@ class PathPlanner:
                                 CSpace[index] = 100
                                 printThis = str(workingX) + ' ' + str(workingY)
                                 rospy.loginfo(printThis)
-                        ## iterate
+                    ## iterate
                 ## iterate
 
                 
@@ -319,6 +320,7 @@ class PathPlanner:
                 break
             neighbors=PathPlanner.neighbors_of_8(mapdata,current[0], current[1])
             for  next in neighbors:
+                ###TODO Add cost penalty for making turns
                 new_cost = cost_so_far[current] + PathPlanner.euclidean_distance(current[0], current[1], next[0], next[1])
                 # rospy.loginfo(new_cost)
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
@@ -334,6 +336,9 @@ class PathPlanner:
         path.reverse()
         rospy.loginfo("Finished A*")
         rospy.loginfo(path)
+
+
+
         return path
 
 
@@ -346,7 +351,34 @@ class PathPlanner:
         :return     [[(x,y)]] The optimized path as a list of tuples (grid coordinates)
         """
         ### EXTRA CREDIT
-        return path
+        
+        pathOpt=[]
+        previousX = None
+        previousY = None
+
+        for index, point in enumerate(path):
+            if(index+1<len(path)):
+                future=path[index + 1]
+            else:
+                rospy.loginfo(pathOpt)
+                return path
+            if (previousX == point[0]) and (point[0] == future[0]):
+                rospy.loginfo("Redundant X Point")
+                pass
+            elif (previousY == point[1]) and (point[1] == future[1]):
+                rospy.loginfo("Redundant Y Point")
+                pass
+            else:    
+                pathOpt.append(point)
+                previousX = point[0]
+                previousY = point[1]
+
+
+
+
+
+
+
         rospy.loginfo("Optimizing path")
 
         
@@ -358,13 +390,22 @@ class PathPlanner:
         :return     [Path]        A Path message (the coordinates are expressed in the world)
         """
         ### REQUIRED CREDIT
-        point=[]
+        pathMsg=Path()
+        pathMsg.header.frame_id=('map')
+
+        poses=[]
         for gridPoint in path:
-            point=PathPlanner.world_to_grid(mapdata,gridPoint[0],gridPoint[1])
+            pose=PoseStamped()
+            pose.header.frame_id=('map')
+            waypoint=PathPlanner.grid_to_world(mapdata,gridPoint[0],gridPoint[1])
+            pose.pose.position=waypoint
+            poses.append(pose)
+        pathMsg.poses=poses
+        self.pub_Path.publish(pathMsg)
         rospy.loginfo("Returning a Path message")
+        return pathMsg
 
-
-        
+    
     def plan_path(self, msg):
         """
         Plans a path between the start and goal locations in the requested.
