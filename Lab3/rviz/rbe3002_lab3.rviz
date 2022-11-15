@@ -8,9 +8,10 @@ Panels:
         - /Status1
         - /Map1
         - /Axes1
-        - /GridCells1
+        - /C-Space1
         - /Path1
         - /Path1/Offset1
+        - /Visited1
       Splitter Ratio: 0.5
     Tree Height: 719
   - Class: rviz/Selection
@@ -126,9 +127,9 @@ Visualization Manager:
       Value: true
     - Alpha: 1
       Class: rviz/GridCells
-      Color: 25; 255; 0
+      Color: 204; 0; 0
       Enabled: true
-      Name: GridCells
+      Name: C-Space
       Queue Size: 10
       Topic: /path_planner/cspace
       Unreliable: false
@@ -136,7 +137,7 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
-      Color: 204; 0; 0
+      Color: 25; 255; 0
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
@@ -155,6 +156,15 @@ Visualization Manager:
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
       Topic: /path_planner/path
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 52; 101; 164
+      Enabled: true
+      Name: Visited
+      Queue Size: 10
+      Topic: /path_planner/visited
       Unreliable: false
       Value: true
   Enabled: true

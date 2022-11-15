@@ -10,7 +10,6 @@ class PathRequester:
 
     def __init__(self):
         rospy.init_node("path_requester")
-
         rospy.loginfo("Waiting For Path Planning Service")
         rospy.wait_for_service('plan_path')
         rospy.loginfo("Path Planning Service Recieved")
@@ -36,7 +35,7 @@ class PathRequester:
         plan.start.pose.orientation=self.quat_orig
         plan.tolerance=0.05
         path=self.requestPath(plan.start,plan.goal,plan.tolerance)
-
+        
     def update_odometry(self, msg):
         """
         Updates the current pose of the robot.

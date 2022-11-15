@@ -33,7 +33,7 @@ class PathPlanner:
         # TODO
         self.pub_Frontier = rospy.Publisher('/path_planner/frontier', GridCells, queue_size=10)
         self.pub_Path = rospy.Publisher('/path_planner/path', Path, queue_size=10)
-        self.pub_waveFront = rospy.Publisher('/path_planner/path',GridCells,queue_size=10)
+        self.pub_Visited=rospy.Publisher('/path_planner/visited', GridCells, queue_size=10)
 
         ## Initialize the request counter
         # TODO
@@ -268,8 +268,8 @@ class PathPlanner:
                             if workingX in range(0, mapWidth - 1):
                                 index = PathPlanner.grid_to_index(mapdata, workingX, workingY)
                                 CSpace[index] = 100
-                                printThis = str(workingX) + ' ' + str(workingY)
-                                rospy.loginfo(printThis)
+                                # printThis = str(workingX) + ' ' + str(workingY)
+                                # rospy.loginfo(printThis)
                     ## iterate
                 ## iterate
 
@@ -303,7 +303,10 @@ class PathPlanner:
     def a_star(self, mapdata, start, goal):
         ### REQUIRED CREDIT
         rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
-
+        msgVisted=GridCells()
+        msgVisted.header.frame_id=('map')
+        msgVisted.cell_height = mapdata.info.resolution
+        msgVisted.cell_width = mapdata.info.resolution
         frontier = PriorityQueue()
         frontier.put(start,0)
         came_from = dict()
@@ -311,6 +314,7 @@ class PathPlanner:
         came_from[start] = None
         # came_from.append(start)
         cost_so_far[start] = 0
+        visited=[]
         # cost_so_far.append(0)
 
         while not frontier.empty():
@@ -328,7 +332,10 @@ class PathPlanner:
                     priority = new_cost + PathPlanner.euclidean_distance(goal[0],goal[1],next[0],next[1])
                     frontier.put(next, priority)
                     came_from[next] = current
-                    # rospy.loginfo(current)
+                    visited.append(PathPlanner.grid_to_world(mapdata,next[0],next[1]))
+                    rospy.loginfo(visited)
+                    msgVisted.cells=visited
+                    self.pub_Visited.publish(msgVisted)
         path=[]
         while current != start:
             path.append(current)
