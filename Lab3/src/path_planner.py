@@ -138,8 +138,8 @@ class PathPlanner:
         ### REQUIRED CREDIT
         
         ## we do have a template, and the translation will be cellred/2 likely
-        x = int(wp.x - mapdata.info.origin.position.x) / mapdata.info.resolution
-        y = int(wp.y - mapdata.info.origin.position.y) / mapdata.info.resolution
+        x = int((wp.x - mapdata.info.origin.position.x) / mapdata.info.resolution)
+        y = int((wp.y - mapdata.info.origin.position.y) / mapdata.info.resolution)
         return(x,y)
 
         
@@ -169,7 +169,7 @@ class PathPlanner:
         """
         ### REQUIRED CREDIT
         
-        if(PathPlanner.grid_to_index(x,y)==100 or x > mapdata.info.width or y > mapdata.info.height):
+        if(mapdata.data[PathPlanner.grid_to_index(mapdata,x,y)]==100 or x > mapdata.info.width or y > mapdata.info.height):
             return False
         return True
          
@@ -208,10 +208,9 @@ class PathPlanner:
         """
         ### REQUIRED CREDIT
         walkableCells=[]
-        neighbors_of_8 = [ (x,y+1),(x,y-1),(x+1,y),(x-1,y),(x+1,y+1),(x-1,y-1),(x+1,y-1),(x-1,y+1)]
+        neighbors_of_8 = [(x,y+1),(x,y-1),(x+1,y),(x-1,y),(x+1,y+1),(x-1,y-1),(x+1,y-1),(x-1,y+1)]
         
         for neighbor in neighbors_of_8 :
-
             if(PathPlanner.is_cell_walkable(mapdata,neighbor[0],neighbor[1])):
                 walkableCells.append(neighbor)
 
@@ -242,7 +241,7 @@ class PathPlanner:
         ### REQUIRED CREDIT
         rospy.loginfo("Calculating C-Space")
         ## Go through each cell in the occupancy grid
-        ## Inflate the obstacles where necessary     
+        ## Inflatcopy.deepcopy(e the obstac)les where necessary     
         CSpace = mapdata.data
         CSpace = list(CSpace)
 
@@ -251,34 +250,28 @@ class PathPlanner:
 
         for i, j in enumerate(mapdata.data):
             if(j == 100): ## If it's occupied
-                # rospy.loginfo("Gay Baby")
-
-                k = -padding ## starts the padding at negative y iterator
-                l = -padding ## x iterator
 
                 point = PathPlanner.index_to_grid(mapdata, i)
                 pointX = point[0]
                 pointY = point[1]
-                
-                for k in range(-padding, padding, 1): ## If k == padding, it would end up being false in k < padding
-                    ## rospy.loginfo("Gayer Baby")
-                    workingY = pointX + k
-                
-                    for l in range(-padding, padding, 1):
-                        ## rospy.loginfo("Gayest Baby")
+                for k in range(-padding, padding + 1, 1): ## If k == padding, it would end up being false in k < padding
+                    
+                    workingY = pointY + k
+                    for l in range(-padding, padding + 1, 1):
+                        
                         workingX = pointX + l
                         ##Stil working here, building a helper, give me a bit
                         
-                        if workingY in range(0, mapWidth):
+                        if workingY in range(0, mapHeight - 1 ):
 
-                            if workingX in range(0, mapWidth):
-                                index = PathPlanner.grid_to_index(mapdata, (pointX + l), (pointY + k))
+                            if workingX in range(0, mapWidth - 1):
+                                index = PathPlanner.grid_to_index(mapdata, workingX, workingY)
                                 CSpace[index] = 100
                                 printThis = str(workingX) + ' ' + str(workingY)
                                 rospy.loginfo(printThis)
                         ## iterate
                 ## iterate
-                
+
                 
         rospy.loginfo("THIS BABY IS THE ENTIRE AGENDA")
         CSpace = tuple(CSpace)
@@ -293,9 +286,6 @@ class PathPlanner:
                 if(j == 100):
                     gridCoord = PathPlanner.index_to_grid(mapdata, i)
                     pointWC = PathPlanner.grid_to_world(mapdata, gridCoord[0], gridCoord[1])
-                    # # point.x WC.x0]
-                    # # point.y = WC.y
-                    # # point.z = 0
                     GridCell_Coord.append(pointWC)     
 
         Msg_GridCells.cells = GridCell_Coord
@@ -311,12 +301,16 @@ class PathPlanner:
     
     def a_star(self, mapdata, start, goal):
         ### REQUIRED CREDIT
+        rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
+
         frontier = PriorityQueue()
         frontier.put(start,0)
-        came_from = []
-        cost_so_far = []
+        came_from = dict()
+        cost_so_far = dict()
         came_from[start] = None
+        # came_from.append(start)
         cost_so_far[start] = 0
+        # cost_so_far.append(0)
 
         while not frontier.empty():
             current = frontier.get()
@@ -324,15 +318,23 @@ class PathPlanner:
             if current == goal:
                 break
             neighbors=PathPlanner.neighbors_of_8(mapdata,current[0], current[1])
-            for next in neighbors(current):
+            for  next in neighbors:
                 new_cost = cost_so_far[current] + PathPlanner.euclidean_distance(current[0], current[1], next[0], next[1])
+                # rospy.loginfo(new_cost)
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
                     cost_so_far[next] = new_cost
                     priority = new_cost + PathPlanner.euclidean_distance(goal[0],goal[1],next[0],next[1])
                     frontier.put(next, priority)
                     came_from[next] = current
-        
-        rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
+                    # rospy.loginfo(current)
+        path=[]
+        while current != start:
+            path.append(current)
+            current = came_from[current]
+        path.reverse()
+        rospy.loginfo("Finished A*")
+        rospy.loginfo(path)
+        return path
 
 
     
@@ -344,6 +346,7 @@ class PathPlanner:
         :return     [[(x,y)]] The optimized path as a list of tuples (grid coordinates)
         """
         ### EXTRA CREDIT
+        return path
         rospy.loginfo("Optimizing path")
 
         
@@ -355,6 +358,9 @@ class PathPlanner:
         :return     [Path]        A Path message (the coordinates are expressed in the world)
         """
         ### REQUIRED CREDIT
+        point=[]
+        for gridPoint in path:
+            point=PathPlanner.world_to_grid(mapdata,gridPoint[0],gridPoint[1])
         rospy.loginfo("Returning a Path message")
 
 
@@ -388,10 +394,10 @@ class PathPlanner:
         Runs the node until Ctrl-C is pressed.
         """
         rospy.sleep(0.5)
-        mapdata=PathPlanner.request_map()
-        while(1==1):
-            self.calc_cspace(mapdata,1)
-            rospy.sleep(0.5)
+        # mapdata=PathPlanner.request_map()
+        # while(1==1):
+        #     self.calc_cspace(mapdata,1)
+        #     rospy.sleep(0.5)
         rospy.spin()
 
 
