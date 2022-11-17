@@ -333,7 +333,7 @@ class PathPlanner:
                     frontier.put(next, priority)
                     came_from[next] = current
                     visited.append(PathPlanner.grid_to_world(mapdata,next[0],next[1]))
-                    rospy.loginfo(visited)
+                    # rospy.loginfo(visited)
                     msgVisted.cells=visited
                     self.pub_Visited.publish(msgVisted)
         path=[]
@@ -360,20 +360,24 @@ class PathPlanner:
         ### EXTRA CREDIT
         
         pathOpt=[]
-        previousX = None
-        previousY = None
+        previousX = -1
+        previousY = -1
 
         for index, point in enumerate(path):
             if(index+1<len(path)):
                 future=path[index + 1]
             else:
+                pathOpt.append(point)
                 rospy.loginfo(pathOpt)
-                return path
+                return pathOpt
             if (previousX == point[0]) and (point[0] == future[0]):
-                rospy.loginfo("Redundant X Point")
+                # rospy.loginfo("Redundant X Point")
                 pass
             elif (previousY == point[1]) and (point[1] == future[1]):
-                rospy.loginfo("Redundant Y Point")
+                # rospy.loginfo("Redundant Y Point")
+                pass
+            elif((abs(previousX-point[0])==1) and (abs(previousY-point[1])==1) and (abs(future[0]-point[0])==1) and (abs(future[1]-point[1])==1)):
+                # rospy.loginfo("Redundant Diagonal Point")
                 pass
             else:    
                 pathOpt.append(point)
