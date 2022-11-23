@@ -8,7 +8,6 @@ from nav_msgs.msg import GridCells, OccupancyGrid, Path
 from geometry_msgs.msg import Point, Pose, PoseStamped
 from priority_queue import PriorityQueue
 
-
 class PathPlanner:
 
 
@@ -34,7 +33,7 @@ class PathPlanner:
         self.pub_Frontier = rospy.Publisher('/path_planner/frontier', GridCells, queue_size=10)
         self.pub_Path = rospy.Publisher('/path_planner/path', Path, queue_size=10)
         self.pub_Visited=rospy.Publisher('/path_planner/visited', GridCells, queue_size=10)
-
+        self.pub_Raycast=rospy.Publisher('/path_planner/raycast', GridCells, queue_size=10)
         ## Initialize the request counter
         # TODO
         ## Sleep to allow roscore to do some housekeeping
@@ -383,8 +382,8 @@ class PathPlanner:
                 pathOpt.append(point)
                 previousX = point[0]
                 previousY = point[1]
-
-
+    
+    
 
 
 
@@ -392,7 +391,107 @@ class PathPlanner:
 
         rospy.loginfo("Optimizing path")
 
-        
+    def string_puller(self,mapdata,path):
+        """
+        Takes a path on the grid and optimizes it using string pilling.
+        :param path [[(int,int)]] The path on the grid (a list of tuples)
+        :return     [[(int,int)]] The path on the grid optimized using string pulling (a list of tuples)
+        """
+        pathOpt=[]
+        pointPrev=path[0]
+        pathOpt.append(pointPrev)
+        self.raycastList=[]
+        for index, point in enumerate(path):
+            if(index+1<len(path)):
+                future=path[index + 1]
+            else:
+                pathOpt.append(point)
+                rospy.loginfo(pathOpt)
+                return pathOpt
+            if(self.raycast(mapdata,pointPrev,future)):
+                rospy.loginfo("Redundant Wapoint Removed")
+            else:
+                pathOpt.append(point)
+                pointPrev=point
+
+
+
+
+
+    def raycast(self,mapdata,point1,point2):
+        """
+        Checks if there is a clear LOS between two points on the grid        
+        :param point1 (int,int) The first point on the grid(tuple)
+        :param point1 (int,int) The second point on the grid(tuple)
+        :return isVisible      True if point is visible, false if not
+        """
+        raycastMsg=GridCells()
+        raycastMsg.cell_height=mapdata.info.resolution
+        raycastMsg.cell_width=mapdata.info.resolution
+        raycastMsg.header.frame_id=('map')
+        raycastList=[]
+        '''
+        draw line between the points 
+        see if there are any blocks in the way
+        if no, return true, if yes, false
+        '''
+        x1  = point1[0]
+        y1 = point1[1]
+        raycastList=[]
+
+        x2 = point2[0]
+        y2 = point2[1]
+        ## use for the loop 
+        x,y = point1[0],point1[1]
+        dx = (x2-x1)
+        dy = (y2-y1)
+        x=point1[0]
+        y=point1[1]
+        if(abs(dx)>abs(dy)):
+            if(dx<0):
+                x1 = point2[0]
+                y1 = point2[1]
+
+                x2 = point1[0]
+                y2 = point1[1]
+            slope=dy/dx
+            indexX=0
+            for x in range(x1,x2):
+                y=y1+indexX*slope
+                self.raycastList.append(PathPlanner.grid_to_world(mapdata,int(round(x)),int(round(y))))
+                raycastMsg.cells=self.raycastList
+                self.pub_Raycast.publish(raycastMsg)
+                indexX+=1
+                if(not PathPlanner.is_cell_walkable(mapdata,int(round(x)),int(round(y)))):
+                    # rospy.loginfo("LOS Blocked")
+                    return False
+
+
+        elif(abs(dy)>abs(dx)):
+            slope=dx/dy
+            indexY=0
+            if(dy<0):
+                x1 = point2[0]
+                y1 = point2[1]
+
+                x2 = point1[0]
+                y2 = point1[1]
+            for y in range(y1,y2):
+                x=x1+(indexY*slope)
+                self.raycastList.append(PathPlanner.grid_to_world(mapdata,int(round(x)),int(round(y))))        
+                raycastMsg.cells=self.raycastList
+                self.pub_Raycast.publish(raycastMsg)
+                indexY+=1
+                if(not PathPlanner.is_cell_walkable(mapdata,int(round(x)),int(round(y)))):
+                    # rospy.loginfo("LOS Blocked")
+                    return False
+
+        # rospy.loginfo('Visible LOS')
+        return True
+
+
+
+    
 
     def path_to_message(self, mapdata, path):
         """
@@ -437,7 +536,8 @@ class PathPlanner:
         ## Optimize waypoints
         waypoints = PathPlanner.optimize_path(path)
         ## Return a Path message
-        return self.path_to_message(mapdata, waypoints)
+        waypointsOpt=self.string_puller(cspacedata,waypoints)
+        return self.path_to_message(mapdata, waypointsOpt)
 
 
     
