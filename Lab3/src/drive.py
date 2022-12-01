@@ -2,7 +2,7 @@
 
 import math
 import rospy
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry,Path
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Twist
 from tf.transformations import euler_from_quaternion
@@ -19,7 +19,7 @@ class Lab2:
         self.py=0
         self.px=0
         self.pth=0
-        rospy.init_node('Lab2')
+        rospy.init_node('Drive')
         ### Tell ROS that this node publishes Twist messages on the '/cmd_vel' topic
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         # TODO
@@ -30,8 +30,9 @@ class Lab2:
         ### Tell ROS that this node subscribes to PoseStamped messages on the '/move_base_simple/goal' topic
         ### When a message is received, call self.go_to
         # TODO
-        rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.arc_to)
+        rospy.Subscriber('/path_planner/path', Path,self.drive_path)
         # delete this when you implement your code
+
 
 
 
@@ -54,7 +55,9 @@ class Lab2:
         self.pub_cmd_vel.publish(msg_cmd_vel)
 
 
-    
+    def drive_path(self,msg):
+        for i in msg.poses:
+            self.arc_to(i)
         
     def drive(self, distance, linear_speed):
         """
@@ -135,14 +138,14 @@ class Lab2:
         print("Rotating")
         print(yawAngle)
         self.rotate(self.normalize_angle(yawAngle-self.pth),1)
-        rospy.sleep(2)
+        rospy.sleep(0.1)
         ### Drive to target
         print('Driving')
         print(distance)
         #self.drive(distance,0.5)
         self.smooth_drive(distance,2)
         ### Rotate to face the waypoints direction        
-        self.rotate(self.normalize_angle(waypointYaw-self.pth),1)
+        # self.rotate(self.normalize_angle(waypointYaw-self.pth),1)
         ### Correct Error if it is too large
     def update_odometry(self, msg):
         """
@@ -185,6 +188,11 @@ class Lab2:
         errorDistance = math.sqrt(math.pow(waypointX - self.px,2) + math.pow(waypointY - self.py,2))
         (roll , pitch , yaw) = euler_from_quaternion(quat_list)
         waypointYaw = yaw
+        yawAngle=math.atan2(waypointY-self.py,waypointX-self.px)
+        ### Rotate to target
+        print("Rotating")
+        print(yawAngle)
+        self.rotate(self.normalize_angle(yawAngle-self.pth),1)
         while(errorDistance) > 0.05:
             #Errors
             errorTheta = self.normalize_angle(self.normalize_angle_positive(math.atan2((waypointY - self.py),(waypointX - self.px))) - self.normalize_angle_positive(self.pth))
@@ -214,8 +222,8 @@ class Lab2:
             rospy.sleep(0.05)
         #Orient to point heading
         self.send_speed(0,0)
-        rospy.sleep(0.3)
-        self.rotate(self.normalize_angle(waypointYaw-self.pth),1)
+        # rospy.sleep(0.3)
+        # self.rotate(self.normalize_angle(waypointYaw-self.pth),1)
         self.send_speed(0,0)
 
     def smooth_drive(self, distance, linear_speed):
