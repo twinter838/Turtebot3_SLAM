@@ -170,9 +170,12 @@ class PathPlanner:
         """
         ### REQUIRED CREDIT
         
-        if(mapdata.data[PathPlanner.grid_to_index(mapdata,x,y)]==100 or x > mapdata.info.width or y > mapdata.info.height):
+        if(mapdata.data[PathPlanner.grid_to_index(mapdata,x,y)] >50 or x > mapdata.info.width or y > mapdata.info.height):
             return False
-        return True
+        elif(mapdata.data[PathPlanner.grid_to_index(mapdata,x,y)] <50 and mapdata.data[PathPlanner.grid_to_index(mapdata,x,y)] >-1):
+            return True
+
+        return False
          
 
                
@@ -250,7 +253,7 @@ class PathPlanner:
         mapHeight = mapdata.info.height
 
         for i, j in enumerate(mapdata.data):
-            if(j == 100): ## If it's occupied
+            if(j >= 80): ## If it's occupied
 
                 point = PathPlanner.index_to_grid(mapdata, i)
                 pointX = point[0]
@@ -549,7 +552,7 @@ class PathPlanner:
         if mapdata is None:
             return Path()
         ## Calculate the C-space and publish it
-        cspacedata = self.calc_cspace(mapdata, 1)
+        cspacedata = self.calc_cspace(mapdata, 3)
         ## Execute A*
         start = PathPlanner.world_to_grid(mapdata, msg.start.pose.position)
         goal  = PathPlanner.world_to_grid(mapdata, msg.goal.pose.position)
