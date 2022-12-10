@@ -30,9 +30,11 @@ class Lab2:
         ### Tell ROS that this node subscribes to PoseStamped messages on the '/move_base_simple/goal' topic
         ### When a message is received, call self.go_to
         # TODO
+        rospy.Subscriber('/path_planner/pathOld',Path,self.update_path)
         rospy.Subscriber('/path_planner/path', Path,self.drive_path)
+        self.pathRunning=False
         # delete this when you implement your code
-
+        
 
 
 
@@ -54,10 +56,72 @@ class Lab2:
         # Send command
         self.pub_cmd_vel.publish(msg_cmd_vel)
 
+    def update_path(self,msg):
+        rospy.loginfo("New Path Recieved")
+        self.newPathRecieved=True
+        self.path=msg
+        rospy.sleep(0.1)
+        self.newPathRecieved=False
 
     def drive_path(self,msg):
-        for i in msg.poses:
-            self.arc_to(i)
+        rospy.sleep(0.11)
+
+        for i in self.path.poses:
+            if(not(self.path.poses==msg.poses)):
+                rospy.loginfo("Aborting Path")
+                return None
+            else:
+                self.arc_to(i)
+
+
+
+
+
+
+
+
+        # point=msg.poses[0]
+        # waypointX = point.pose.position.x
+        # waypointY = point.pose.position.y
+        # yawAngle=math.atan2(waypointY-self.py,waypointX-self.px)
+        # pointGoal=msg.poses[len(msg.poses)-1]
+        # waypointXGoal = pointGoal.pose.position.x
+        # waypointYGoal = pointGoal.pose.position.y
+        # rospy.loginfo("Driving too")
+        # rospy.loginfo(waypointX)
+        # rospy.loginfo(self.px)
+        # rospy.loginfo(waypointY)
+        # rospy.loginfo(self.py)
+        # rospy.loginfo(msg.poses)
+        
+        # errorTheta = self.normalize_angle(self.normalize_angle_positive(yawAngle) - self.normalize_angle_positive(self.pth))
+        # errorDistance = math.sqrt(math.pow(waypointX - self.px,2) + math.pow(waypointY - self.py,2))
+        # errorDistanceGoal = math.sqrt(math.pow(waypointXGoal - self.px,2) + math.pow(waypointYGoal - self.py,2))
+
+        # if(abs(errorTheta)>1 and errorDistance>0.1 and self.newPathRecieved==False):
+        #     rospy.loginfo("Correcting Orientation")
+        #     self.rotate(self.normalize_angle(yawAngle-self.pth),1)
+        # if(self.newPathRecieved==False and errorDistance>0.1):
+        #     self.arc_to(msg.poses[0])
+        # # errorDistanceGoal = math.sqrt(math.pow(waypointXGoal - self.px,2) + math.pow(waypointYGoal - self.py,2))
+        # # if(len(msg.poses)>1 and errorDistanceGoal>0.1 and self.newPathRecieved==False):
+        # #     point=msg.poses[1]
+        # #     waypointX = point.pose.position.x
+        # #     waypointY = point.pose.position.y
+        # #     errorDistance = math.sqrt(math.pow(waypointX - self.px,2) + math.pow(waypointY - self.py,2))
+        # #     if(self.newPathRecieved==False and errorDistance>0.1):
+        # #         rospy.loginfo("Moving to next point")
+        # #         self.arc_to(msg.poses[1])
+        # #     elif(errorDistance<0.1):
+        # #         rospy.loginfo("Reached Destination")
+        # #         self.send_speed(0,0)        # rospy.sleep(2)
+        # # if(self.newPathRecieved==False):
+        # #     self.send_speed(0,0)
+     
+        
+
+
+
         
     def drive(self, distance, linear_speed):
         """
@@ -87,18 +151,21 @@ class Lab2:
         :param angle         [float] [rad]   The distance to cover.
         :param angular_speed [float] [rad/s] The angular speed.
         """
+        KpHeading = 1.5
+        KiHeading = 0.002
+        errorThetaAcc = 0
+        errorTheta = self.normalize_angle(self.normalize_angle_positive(angle) - self.normalize_angle_positive(self.pth))
         ### REQUIRED CREDIT
         angleOld=self.pth
         angle=self.normalize_angle(angle+angleOld)
-        while abs(self.pth-angle) > 0.05:
-            angle=self.normalize_angle(angle)
-            if(angle>angleOld):
-                self.send_speed(0,aspeed)
-            if(angle<angleOld):
-                self.send_speed(0,-aspeed)
+        while abs(errorTheta) > 0.05 and self.newPathRecieved==False:
+            errorTheta = self.normalize_angle(self.normalize_angle_positive(angle) - self.normalize_angle_positive(self.pth))
+            effortTheta = (errorTheta * KpHeading) + (KiHeading * errorThetaAcc)
+            errorThetaAcc=errorTheta+errorThetaAcc
+            self.send_speed(0,effortTheta)
+            rospy.sleep(0.05)
+
         
-        rospy.sleep(0.1)
-        self.send_speed(0,0)
 
     def normalize_angle_positive(self,angle):
         """ Normalizes the angle to be 0 to 2*pi
@@ -173,13 +240,14 @@ class Lab2:
         ### EXTRA CREDIT
         print("Starting Arc to")
         #PID values
-        KpHeading = 0.5
-        KiHeading = 0.005
-        KpDistance = 0.1
-        KiDistance = 0.005
+        KpHeading = 1
+        KiHeading = 0.01
+        KpDistance = 1.1
+        KiDistance = 0.001
 
         errorThetaAcc = 0
         errorDistanceAcc = 0
+       
 
         waypointX = position.pose.position.x
         waypointY = position.pose.position.y
@@ -190,11 +258,11 @@ class Lab2:
         (roll , pitch , yaw) = euler_from_quaternion(quat_list)
         waypointYaw = yaw
         yawAngle=math.atan2(waypointY-self.py,waypointX-self.px)
-        ### Rotate to target
+        ## Rotate to target
         print("Rotating")
         print(yawAngle)
         self.rotate(self.normalize_angle(yawAngle-self.pth),1)
-        while(errorDistance) > 0.05:
+        while(errorDistance) > 0.05 and self.newPathRecieved==False:
             #Errors
             errorTheta = self.normalize_angle(self.normalize_angle_positive(math.atan2((waypointY - self.py),(waypointX - self.px))) - self.normalize_angle_positive(self.pth))
 
@@ -203,28 +271,17 @@ class Lab2:
             #Efforts
             effortTheta = (errorTheta * KpHeading) + (KiHeading * errorThetaAcc)
             effortDistance = (errorDistance * KpDistance) + (KiDistance * errorDistanceAcc)
-            
-            #Accumulated Errors
+
             errorThetaAcc=errorTheta+errorThetaAcc
             errorDistanceAcc=errorDistance+errorDistanceAcc
             if(effortDistance>0.22):
                 effortDistance=0.15
+
             self.send_speed(effortDistance,effortTheta)
 
-            print("Effort Theta")
-            print(effortTheta)
-            print("Effort Distance")
-            print(effortDistance)
-            print("Error Theta")
-            print(errorTheta)
-            print("Error Distance")
-            print(errorDistance)
-
             rospy.sleep(0.05)
-        #Orient to point heading
-        self.send_speed(0,0)
-        # rospy.sleep(0.3)
-        # self.rotate(self.normalize_angle(waypointYaw-self.pth),1)
+        if(self.newPathRecieved==True):
+            rospy.loginfo("Aborting Arc as new path recieved")
         self.send_speed(0,0)
 
     def smooth_drive(self, distance, linear_speed):

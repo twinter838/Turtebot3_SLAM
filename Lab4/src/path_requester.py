@@ -6,16 +6,27 @@ from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
 from geometry_msgs.msg import Point, Pose, PoseStamped
 from nav_msgs.msg import Odometry
+from std_srvs.srv import Empty,SetBool
+
 class PathRequester:
 
     def __init__(self):
         rospy.init_node("path_requester")
         rospy.loginfo("Waiting For Path Planning Service")
+        request_new_path=rospy.Service('request_new_path',SetBool,self.request_path)
         rospy.wait_for_service('plan_path')
+        
         rospy.loginfo("Path Planning Service Recieved")
         self.requestPath = rospy.ServiceProxy('plan_path', GetPlan)
         rospy.Subscriber('/odom', Odometry , self.update_odometry)
-        rospy.Subscriber('/move_base_simple/goal', PoseStamped,self.request_path)
+
+        rospy.Subscriber('/move_base_simple/goal', PoseStamped,self.update_path_goal)
+        rospy.sleep(0.5)
+
+
+    def update_path_goal(self,msg):
+        self.goal=msg
+        self.request_path(msg)
 
     def request_path(self,msg):
         """
@@ -23,10 +34,11 @@ class PathRequester:
         This method is a callback bound to a Subscriber.
         :param msg [PoseStamped] The goal of the path
         """
+ 
         rospy.loginfo("Generating path request")
         plan=GetPlan()
         path=Path()
-        plan.goal=msg
+        plan.goal=self.goal
         plan.start=PoseStamped()
         plan.start.pose.position.x=self.px
         plan.start.pose.position.y=self.py
@@ -35,7 +47,7 @@ class PathRequester:
         plan.start.pose.orientation=self.quat_orig
         plan.tolerance=0.05
         path=self.requestPath(plan.start,plan.goal,plan.tolerance)
-        
+        return True,"Path Planned"
     def update_odometry(self, msg):
         """
         Updates the current pose of the robot.

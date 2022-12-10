@@ -7,7 +7,7 @@ from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
 from geometry_msgs.msg import Point, Pose, PoseStamped
 from priority_queue import PriorityQueue
-
+from std_srvs.srv import Empty,SetBool
 class PathPlanner:
 
 
@@ -19,14 +19,21 @@ class PathPlanner:
         ### REQUIRED CREDIT
         ## Initialize the node and call it "path_planner"
         rospy.init_node("path_planner")
+        self.waypointsOpt=[]
         ## Create a new service called "plan_path" that accepts messages of
         ## type GetPlan and calls self.plan_path() when a message is received
         # TODO
         plan_path=rospy.Service('plan_path',GetPlan,self.plan_path)
+        rospy.wait_for_service('request_new_path')
+
+        self.requestNewPath = rospy.ServiceProxy('request_new_path', SetBool)
+
         ## Create a publisher for the C-space (the enlarged occupancy grid)
         ## The topic is "/path_planner/cspace", the message type is GridCells
         # TODO
+        rospy.Subscriber('/map',OccupancyGrid,self.request_CSpace)
         self.pub_CSpace = rospy.Publisher('/path_planner/cspace', GridCells, queue_size=10)
+        self.pub_CSpaceOccGrid = rospy.Publisher('/path_planner/cspace_occgrid', OccupancyGrid, queue_size=10)
         ## Create publishers for A* (expanded cells, frontier, ...)
         ## Choose a the topic names, the message type is GridCells
         # TODO
@@ -35,8 +42,9 @@ class PathPlanner:
         self.pub_PathOld = rospy.Publisher('/path_planner/pathOld', Path, queue_size=10)
         self.pub_Visited=rospy.Publisher('/path_planner/visited', GridCells, queue_size=10)
         self.pub_Raycast=rospy.Publisher('/path_planner/raycast', GridCells, queue_size=10)
+        mapdata=rospy.wait_for_message('/map',OccupancyGrid)
         ## Initialize the request counter
-        # TODO
+
         ## Sleep to allow roscore to do some housekeeping
         rospy.sleep(1.0)
         rospy.loginfo("Path planner node ready")
@@ -233,6 +241,14 @@ class PathPlanner:
         mapdata=rospy.wait_for_message('/map',OccupancyGrid)
         return mapdata
 
+    def request_CSpace(self,mapdata):
+        cspaceData=(self.calc_cspace(mapdata,2))
+        rospy.loginfo("Recheking CSpace")
+        self.pub_CSpaceOccGrid.publish(cspaceData)
+        rospy.loginfo("Checking Path Validity")
+        if(not(self.path_still_walkable(cspaceData)) and len(self.waypointsOpt)>0):
+            rospy.loginfo("Requesting New Path as old is invalid")
+            self.requestNewPath()
 
     def calc_cspace(self, mapdata, padding):
         """
@@ -325,7 +341,7 @@ class PathPlanner:
 
             if current == goal:
                 break
-            neighbors=PathPlanner.neighbors_of_8(mapdata,current[0], current[1])
+            neighbors = PathPlanner.neighbors_of_8(mapdata,current[0], current[1])
             for  next in neighbors:
                 ###TODO Add cost penalty for making turns
                 new_cost = cost_so_far[current] + PathPlanner.euclidean_distance(current[0], current[1], next[0], next[1])
@@ -343,6 +359,7 @@ class PathPlanner:
         while current != start:
             path.append(current)
             current = came_from[current]
+        path.append(start)
         path.reverse()
         rospy.loginfo("Finished A*")
         rospy.loginfo(path)
@@ -420,6 +437,21 @@ class PathPlanner:
 
 
 
+
+
+    def path_still_walkable(self,mapdata):
+        """
+        Given a path, check if it is still valid using updated C-Space Data.
+        :param path [[(int,int)]] The path on the grid (a list of tuples)
+        :return     [[(int,int)]] The path on the grid optimized using string pulling (a list of tuples)
+        """
+        for index, point in enumerate(self.waypointsOpt):
+            if(index+1<len(self.waypointsOpt)):
+
+                if(not (self.raycast(mapdata,point,self.waypointsOpt[index+1]))):
+                   return False
+            else:
+                return True
 
 
     def raycast(self,mapdata,point1,point2):
@@ -506,6 +538,7 @@ class PathPlanner:
         ### REQUIRED CREDIT
         pathMsg=Path()
         pathMsg.header.frame_id=('map')
+        path.pop(0)
 
         poses=[]
         for gridPoint in path:
@@ -516,9 +549,10 @@ class PathPlanner:
             poses.append(pose)
         pathMsg.poses=poses
         self.pub_Path.publish(pathMsg)
+        self.pub_PathOld.publish(pathMsg)
         rospy.loginfo("Returning a Path message")
         return pathMsg
-    def path_to_message_unoptimized(self, mapdata, path):
+    def path_to_message_altTopic(self, mapdata, path):
         """
         Takes a path on the grid and returns a Path message.
         :param path [[(int,int)]] The path on the grid (a list of tuples)
@@ -552,17 +586,18 @@ class PathPlanner:
         if mapdata is None:
             return Path()
         ## Calculate the C-space and publish it
-        cspacedata = self.calc_cspace(mapdata, 3)
+        self.cspacedata = self.calc_cspace(mapdata, 2)
         ## Execute A*
+
         start = PathPlanner.world_to_grid(mapdata, msg.start.pose.position)
         goal  = PathPlanner.world_to_grid(mapdata, msg.goal.pose.position)
-        path  = self.a_star(cspacedata, start, goal)
+        path  = self.a_star(self.cspacedata, start, goal)
         ## Optimize waypoints
-        self.path_to_message_unoptimized(mapdata,path)
         waypoints = PathPlanner.optimize_path(path)
         ## Return a Path message
-        waypointsOpt=self.string_puller(cspacedata,waypoints)
-        return self.path_to_message(mapdata, waypointsOpt)
+        self.waypointsOpt=self.string_puller(self.cspacedata,waypoints)
+        # self.path_to_message_altTopic(mapdata,self.waypointsOpt)
+        return self.path_to_message(mapdata, self.waypointsOpt)
 
 
     
@@ -571,10 +606,6 @@ class PathPlanner:
         Runs the node until Ctrl-C is pressed.
         """
         rospy.sleep(0.5)
-        # mapdata=PathPlanner.request_map()
-        # while(1==1):
-        #     self.calc_cspace(mapdata,1)
-        #     rospy.sleep(0.5)
         rospy.spin()
 
 
