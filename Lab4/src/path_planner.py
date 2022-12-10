@@ -34,6 +34,8 @@ class PathPlanner:
         rospy.Subscriber('/map',OccupancyGrid,self.request_CSpace)
         self.pub_CSpace = rospy.Publisher('/path_planner/cspace', GridCells, queue_size=10)
         self.pub_CSpaceOccGrid = rospy.Publisher('/path_planner/cspace_occgrid', OccupancyGrid, queue_size=10)
+        self.pub_Costmap = rospy.Publisher('/path_planner/costmap', OccupancyGrid, queue_size=10)
+
         ## Create publishers for A* (expanded cells, frontier, ...)
         ## Choose a the topic names, the message type is GridCells
         # TODO
@@ -293,7 +295,7 @@ class PathPlanner:
                 ## iterate
 
                 
-        rospy.loginfo("THIS BABY IS THE ENTIRE AGENDA")
+        # rospy.loginfo("THIS BABY IS THE ENTIRE AGENDA")
         CSpace = tuple(CSpace)
 
         ## Create a GridCells message and publish it
@@ -318,8 +320,55 @@ class PathPlanner:
         
         return CspaceOG
 
-    
-    def a_star(self, mapdata, start, goal):
+    def calc_costmap(self,mapdata,paddingMax):
+        """
+        Calculates the costmap, i.e., adds additional cost to cells close to obstacles to make them less preferable to pathing algorithims.
+        Publishes the costmap which is the Cspace with additional data about cell costs
+        :param mapdata [OccupancyGrid] The map data.
+        :param paddingMax [int]        Max distance that cost should be added to cells at
+        :return        [OccupancyGrid] The Costmap.
+        """
+        ### REQUIRED CREDIT
+        rospy.loginfo("Calculating C-Space")
+        ## Go through each cell in the occupancy grid
+        ## Inflatcopy.deepcopy(e the obstac)les where necessary     
+        costmap = mapdata.data
+        costmap = list(costmap)
+        padding=1
+        mapWidth = mapdata.info.width
+        mapHeight = mapdata.info.height
+        while(padding<paddingMax):
+            for i, j in enumerate(mapdata.data):
+                if(j >= 80): ## If it's occupied
+
+                    point = PathPlanner.index_to_grid(mapdata, i)
+                    pointX = point[0]
+                    pointY = point[1]
+                    for k in range(-padding, padding + 1, 1): ## If k == padding, it would end up being false in k < padding
+                        
+                        workingY = pointY + k
+                        for l in range(-padding, padding + 1, 1):
+                            
+                            workingX = pointX + l
+                            ##Stil working here, building a helper, give me a bit
+                            
+                            if workingY in range(0, mapHeight - 1 ):
+
+                                if workingX in range(0, mapWidth - 1):
+                                    index = PathPlanner.grid_to_index(mapdata, workingX, workingY)
+                                    if((costmap[index]+3<100)):
+                                        costmap[index]+=3
+                                    # printThis = str(workingX) + ' ' + str(workingY)
+                                    # rospy.loginfo(printThis)
+                        ## iterate
+                    ## iterate
+            padding+=1
+        CostmapOG = OccupancyGrid()
+        CostmapOG.data = costmap
+        CostmapOG.info = mapdata.info
+        self.pub_Costmap.publish(CostmapOG)
+        return CostmapOG
+    def a_star(self, mapdata,costmap, start, goal):
         ### REQUIRED CREDIT
         rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
         msgVisted=GridCells()
@@ -344,7 +393,7 @@ class PathPlanner:
             neighbors = PathPlanner.neighbors_of_8(mapdata,current[0], current[1])
             for  next in neighbors:
                 ###TODO Add cost penalty for making turns
-                new_cost = cost_so_far[current] + PathPlanner.euclidean_distance(current[0], current[1], next[0], next[1])
+                new_cost = cost_so_far[current] + PathPlanner.euclidean_distance(current[0], current[1], next[0], next[1])+costmap.data[PathPlanner.grid_to_index(mapdata,next[0],next[1])]
                 # rospy.loginfo(new_cost)
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
                     cost_so_far[next] = new_cost
@@ -461,6 +510,7 @@ class PathPlanner:
         :param point1 (int,int) The second point on the grid(tuple)
         :return isVisible      True if point is visible, false if not
         """
+        favorability=0
         raycastMsg=GridCells()
         raycastMsg.cell_height=mapdata.info.resolution
         raycastMsg.cell_width=mapdata.info.resolution
@@ -474,7 +524,7 @@ class PathPlanner:
         x1  = point1[0]
         y1 = point1[1]
         raycastList=[]
-
+        raycastLen=1
         x2 = point2[0]
         y2 = point2[1]
         ## use for the loop 
@@ -498,10 +548,11 @@ class PathPlanner:
                 raycastMsg.cells=self.raycastList
                 self.pub_Raycast.publish(raycastMsg)
                 indexX+=1
+                raycastLen+=1
                 if(not PathPlanner.is_cell_walkable(mapdata,int(round(x)),int(round(y)))):
                     # rospy.loginfo("LOS Blocked")
                     return False
-
+                favorability+=mapdata.data[PathPlanner.grid_to_index(mapdata,int(round(x)),int(round(y)))]
 
         elif(abs(dy)>abs(dx)):
             slope=dx/dy
@@ -518,10 +569,14 @@ class PathPlanner:
                 raycastMsg.cells=self.raycastList
                 self.pub_Raycast.publish(raycastMsg)
                 indexY+=1
+                raycastLen+=1
                 if(not PathPlanner.is_cell_walkable(mapdata,int(round(x)),int(round(y)))):
                     # rospy.loginfo("LOS Blocked")
                     return False
+                favorability+=mapdata.data[PathPlanner.grid_to_index(mapdata,int(round(x)),int(round(y)))]
 
+        if(favorability/raycastLen>50):
+            return False
         # rospy.loginfo('Visible LOS')
         return True
 
@@ -588,14 +643,14 @@ class PathPlanner:
         ## Calculate the C-space and publish it
         self.cspacedata = self.calc_cspace(mapdata, 2)
         ## Execute A*
-
+        costmap=self.calc_costmap(self.cspacedata,4)
         start = PathPlanner.world_to_grid(mapdata, msg.start.pose.position)
         goal  = PathPlanner.world_to_grid(mapdata, msg.goal.pose.position)
-        path  = self.a_star(self.cspacedata, start, goal)
+        path  = self.a_star(self.cspacedata,costmap,start, goal)
         ## Optimize waypoints
         waypoints = PathPlanner.optimize_path(path)
         ## Return a Path message
-        self.waypointsOpt=self.string_puller(self.cspacedata,waypoints)
+        self.waypointsOpt=self.string_puller(costmap,waypoints)
         # self.path_to_message_altTopic(mapdata,self.waypointsOpt)
         return self.path_to_message(mapdata, self.waypointsOpt)
 
