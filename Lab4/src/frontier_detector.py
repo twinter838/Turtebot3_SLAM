@@ -77,21 +77,17 @@ class frontier_detector:
 
 
     #frontier centroid calculation
-    def find_centroid(self,mapdata,frontier_data):
+    def find_centroid(self,frontier_data):
         
         ## go through each of the points addding them together and then take the average
         c_x = 0
         c_y = 0
         n = len(frontier_data.data)
 
-        for i in frontier_data.data:
-            point = PathPlanner.index_to_grid(mapdata,i)
-            c_x = c_x + point[0]
-            c_y = c_y + point[1]
+        point= frontier_data[n/2]
 
-
-        c_x = c_x / n
-        c_y = c_y / n
+        c_x = point[0]
+        c_y = point[1]
 
         return (c_x,c_y)
         
@@ -133,10 +129,11 @@ class frontier_detector:
                 while not (pointsToVisit == []):
                     index = pointsToVisit.pop
                     usedPoints[index] = 1
-                    # pointConversion = 
-                    frontiers[currentFrontierIndex][pointNumber] = index
 
                     workingPoint = PathPlanner.index_to_grid(i)
+
+                    frontiers[currentFrontierIndex][pointNumber] = workingPoint
+
                     pointX = workingPoint(0)
                     pointY = workingPoint(1)
 
@@ -155,21 +152,27 @@ class frontier_detector:
 
                                     workingIndex = PathPlanner.grid_to_index(mapdata, workingX, workingY)
 
-                                    if(index == i):
+                                    if(index == workingIndex):
                                         continue ##don't consider the cell itself or you will end up in a loop
-
-                                    if(frontierPoints[workingIndex] == 100):
+                                    elif(frontierPoints[workingIndex] == 100):
                                         pointsToVisit.append[workingIndex]
-                                        
-
+                        #end of l loop        
+                    #end of k loop
 
                     
-                    pass
+                ##end of While loop
 
+                ##done looping through a group of frontier points
+                frontiers[currentFrontierIndex][0] = self.find_centroid(frontiers[1:len(frontiers[currentFrontierIndex])])
                 
                 ## Iterates through frontier numbers
-                if (pointsToVisit == []):
-                    currentFrontierIndex += 1
+                
+                currentFrontierIndex += 1
+
+
+            ##end of if frontier cell
+
+        ##end of i loop
 
     def find_boundary(self, mapdata):    
 
