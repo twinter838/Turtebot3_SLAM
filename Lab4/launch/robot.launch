@@ -15,7 +15,8 @@
   
   
   <group unless="$(arg isSimulation)">
-    <include file="$(find turtlebot3_bringup)/launch/turtlebot3_model.launch"/>
+    <!--include file="$(find turtlebot3_bringup)/launch/turtlebot3_model.launch"/-->
+    <include file="$(find Lab4)/launch/practice_exploration.launch"/>   
   </group>
   
   

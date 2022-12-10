@@ -58,7 +58,7 @@ class frontier_detector:
         frontierData=self.find_boundary(mapdata)
         self.pub_Frontier.publish(frontierData)
         rospy.loginfo("Publishing Frontier Map")
-
+        frontierData=self.find_centroid_and_members
         # frontierCentroid = self.find_centroid(mapdata,frontierData)
         # self.pub_frontier_centroid.publish(frontierCentroid)
         rospy.loginfo("Publishing Frontier Centroid")

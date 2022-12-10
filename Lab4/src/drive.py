@@ -6,6 +6,7 @@ from nav_msgs.msg import Odometry,Path
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Twist
 from tf.transformations import euler_from_quaternion
+import tf.transformations
 
 class Lab2:
 
@@ -33,6 +34,7 @@ class Lab2:
         rospy.Subscriber('/path_planner/pathOld',Path,self.update_path)
         rospy.Subscriber('/path_planner/path', Path,self.drive_path)
         self.pathRunning=False
+        self.listener=tf.TransformListener()
         # delete this when you implement your code
         
 
@@ -65,13 +67,12 @@ class Lab2:
 
     def drive_path(self,msg):
         rospy.sleep(0.11)
-
-        for i in self.path.poses:
-            if(not(self.path.poses==msg.poses)):
-                rospy.loginfo("Aborting Path")
-                return None
-            else:
-                self.arc_to(i)
+        if(not(self.path.poses==msg.poses)):
+            rospy.loginfo("Aborting Path")
+            return None
+        else:
+            self.arc_to(self.path.poses[0])
+            rospy.sleep(2)
 
 
 
@@ -223,12 +224,17 @@ class Lab2:
         """
         ### REQUIRED CREDIT
         # TODO
-        self.px = msg.pose.pose.position.x
-        self.py = msg.pose.pose.position.y
-        quat_orig = msg.pose.pose.orientation
-        quat_list = [quat_orig.x, quat_orig.y, quat_orig.z, quat_orig.w]
-        (roll , pitch , yaw) = euler_from_quaternion(quat_list)
-        self.pth = yaw
+
+        try:
+            (trans,rot) = self.listener.lookupTransform('/odom', '/base_footprint', rospy.Time(0))
+            self.px = trans[0]
+            self.py = trans[1]
+            quat_orig = rot
+            quat_list = [rot[0], rot[1], rot[2], rot[3]]
+            (roll , pitch , yaw) = euler_from_quaternion(quat_list)
+            self.pth = yaw
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            pass
 
 
 
@@ -262,7 +268,7 @@ class Lab2:
         print("Rotating")
         print(yawAngle)
         self.rotate(self.normalize_angle(yawAngle-self.pth),1)
-        while(errorDistance) > 0.05 and self.newPathRecieved==False:
+        while(errorDistance) > 0.01 and self.newPathRecieved==False:
             #Errors
             errorTheta = self.normalize_angle(self.normalize_angle_positive(math.atan2((waypointY - self.py),(waypointX - self.px))) - self.normalize_angle_positive(self.pth))
 
@@ -274,8 +280,8 @@ class Lab2:
 
             errorThetaAcc=errorTheta+errorThetaAcc
             errorDistanceAcc=errorDistance+errorDistanceAcc
-            if(effortDistance>0.22):
-                effortDistance=0.15
+            if(effortDistance>0.1):
+                effortDistance=0.05
 
             self.send_speed(effortDistance,effortTheta)
 
