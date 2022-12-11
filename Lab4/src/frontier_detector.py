@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 
-import math
 import rospy
-import numpy
-import string
 from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
 from geometry_msgs.msg import Point, Pose, PoseStamped
 from path_planner import PathPlanner
 from std_msgs.msg import String,Empty
 from priority_queue import PriorityQueue
+from std_srvs.srv import Empty,SetBool
 
 class frontier_detector:
 
@@ -31,10 +29,13 @@ class frontier_detector:
 
         rospy.loginfo("Frontier detector node ready")
         self.pub_Frontier=rospy.Publisher('/frontier_detector/frontier',OccupancyGrid, queue_size=10)
-        self.pub_frontier_centroid = rospy.Publisher('/frontier_detector/frontier_centroid', GridCells, queue_size= 10)
+        self.pub_frontier_waypoint = rospy.Publisher('/frontier_detector/frontier_waypoint', PoseStamped, queue_size= 10)
+        
         rospy.Subscriber('/path_planner/cspace_occgrid',OccupancyGrid,self.find_frontiers)
-        # request_frontier_centroid = rospy.service('frontier_centroid_service')
+        # request_frontier_centroid = rospy.service('frontier_centroid_service')    
+
         rospy.sleep(1.0)
+
     @staticmethod
     def request_map():
         """
@@ -58,7 +59,8 @@ class frontier_detector:
         frontierData=self.find_boundary(mapdata)
         self.pub_Frontier.publish(frontierData)
         rospy.loginfo("Publishing Frontier Map")
-        frontierData=self.find_centroid_and_members
+
+        frontierCentroid=self.find_centroid_and_members(frontierData,mapdata)
         # frontierCentroid = self.find_centroid(mapdata,frontierData)
         # self.pub_frontier_centroid.publish(frontierCentroid)
         rospy.loginfo("Publishing Frontier Centroid")
@@ -164,7 +166,7 @@ class frontier_detector:
 
                 ##done looping through a group of frontier points
                 frontiers[currentFrontierIndex][0] = self.find_centroid(frontiers[1:len(frontiers[currentFrontierIndex])])
-                
+            
                 ## Iterates through frontier numbers
                 
                 currentFrontierIndex += 1
@@ -175,6 +177,29 @@ class frontier_detector:
         ##end of i loop
 
 
+    def detect_closest_centroid(self,current,frontierList):
+
+        firstFrontier = frontierList[0][0]     
+        min = PathPlanner.euclidean_distance(current[0],current[1],firstFrontier[0],firstFrontier[1])
+        indexOfClosestCentroid = 0 
+
+        for i in range(1,len(frontierList) + 1):
+            frontierCentroid = frontierList[i][0]
+            dist = PathPlanner.euclidean_distance(current[0],current[1],frontierCentroid[0],frontierCentroid[1])
+
+            if (min > dist):
+                min = dist
+                indexOfClosestCentroid = i
+
+        closestCentroidPoint = frontierList[indexOfClosestCentroid][0]
+        closestCentroid = PoseStamped()
+        closestCentroid.header.frame_id = ('map')
+        closestCentroid.pose.position.x = closestCentroidPoint[0]
+        closestCentroid.pose.position.y = closestCentroidPoint[1]
+        closestCentroid.pose.position.z = 0
+
+        return closestCentroid           
+ 
 
     def find_boundary(self, mapdata):    
 

@@ -10,6 +10,7 @@ Panels:
         - /Path1
         - /Map2
         - /GridCells2
+        - /Map3
       Splitter Ratio: 0.594406008720398
     Tree Height: 719
   - Class: rviz/Selection
@@ -169,9 +170,9 @@ Visualization Manager:
       Unreliable: false
       Use Timestamp: false
       Value: true
-    - Alpha: 0.30000001192092896
+    - Alpha: 0.699999988079071
       Class: rviz/GridCells
-      Color: 193; 125; 17
+      Color: 239; 41; 41
       Enabled: true
       Name: GridCells
       Queue Size: 10
@@ -221,6 +222,16 @@ Visualization Manager:
       Topic: /path_planner/raycast
       Unreliable: false
       Value: true
+    - Alpha: 0.5
+      Class: rviz/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic: /path_planner/costmap
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -248,7 +259,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -1.5557968616485596
+      Angle: 2.649205446243286
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -258,10 +269,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 151.35691833496094
+      Scale: 154.32119750976562
       Target Frame: map
-      X: 0
-      Y: 0
+      X: -0.579510509967804
+      Y: -0.10051242262125015
     Saved: ~
 Window Geometry:
   Displays:

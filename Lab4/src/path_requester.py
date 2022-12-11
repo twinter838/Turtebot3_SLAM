@@ -16,6 +16,9 @@ class PathRequester:
         request_new_path=rospy.Service('request_new_path',SetBool,self.request_path)
         rospy.wait_for_service('plan_path')
         
+
+        frontier_detector = rospy.Service('frontier_detector',PoseStamped,self.update_path_goal)
+        
         rospy.loginfo("Path Planning Service Recieved")
         self.requestPath = rospy.ServiceProxy('plan_path', GetPlan)
         rospy.Subscriber('/odom', Odometry , self.update_odometry)
