@@ -29,12 +29,10 @@ class frontier_detector:
 
         rospy.loginfo("Frontier detector node ready")
         self.pub_Frontier=rospy.Publisher('/frontier_detector/frontier',OccupancyGrid, queue_size=10)
-        self.pub_frontier_centroid = rospy.Publisher('/frontier_detector/frontier_centroid', GridCells, queue_size= 10)
+        self.pub_frontier_waypoint = rospy.Publisher('/frontier_detector/frontier_waypoint', PoseStamped, queue_size= 10)
         
         rospy.Subscriber('/path_planner/cspace_occgrid',OccupancyGrid,self.find_frontiers)
-        # request_frontier_centroid = rospy.service('frontier_centroid_service')
-        rospy.wait_for_service('frontier_detector')
-        self.frontierDetector = rospy.ServiceProxy('frontier_detector', SetBool)
+        # request_frontier_centroid = rospy.service('frontier_centroid_service')    
 
         rospy.sleep(1.0)
 
@@ -185,15 +183,22 @@ class frontier_detector:
         min = PathPlanner.euclidean_distance(current[0],current[1],firstFrontier[0],firstFrontier[1])
         indexOfClosestCentroid = 0 
 
-        for i in range(1,len(frontierList)+1):
+        for i in range(1,len(frontierList) + 1):
             frontierCentroid = frontierList[i][0]
             dist = PathPlanner.euclidean_distance(current[0],current[1],frontierCentroid[0],frontierCentroid[1])
 
             if (min > dist):
                 min = dist
                 indexOfClosestCentroid = i
-            
-        return frontierList[indexOfClosestCentroid][0]                
+
+        closestCentroidPoint = frontierList[indexOfClosestCentroid][0]
+        closestCentroid = PoseStamped()
+        closestCentroid.header.frame_id = ('map')
+        closestCentroid.pose.position.x = closestCentroidPoint[0]
+        closestCentroid.pose.position.y = closestCentroidPoint[1]
+        closestCentroid.pose.position.z = 0
+
+        return closestCentroid           
  
 
     def find_boundary(self, mapdata):    
