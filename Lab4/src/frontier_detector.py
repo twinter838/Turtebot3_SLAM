@@ -84,7 +84,7 @@ class frontier_detector:
         c_y = 0
         n = len(frontier_data.data)
 
-        point= frontier_data[n/2]
+        point= frontier_data[n//2]
 
         c_x = point[0]
         c_y = point[1]
@@ -173,6 +173,8 @@ class frontier_detector:
             ##end of if frontier cell
 
         ##end of i loop
+
+
 
     def find_boundary(self, mapdata):    
 
