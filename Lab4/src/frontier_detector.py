@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
+import math
 from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
 from geometry_msgs.msg import Point, Pose, PoseStamped
@@ -8,10 +9,10 @@ from path_planner import PathPlanner
 from std_msgs.msg import String,Empty
 from priority_queue import PriorityQueue
 from std_srvs.srv import Empty,SetBool
+from std_msgs.msg import Bool,Empty
 
 class frontier_detector:
-
-
+   
 
     def __init__(self):
         """
@@ -27,13 +28,19 @@ class frontier_detector:
         # TODO
         ## Sleep to allow roscore to do some housekeeping
 
-        rospy.loginfo("Frontier detector node ready")
-        self.pub_Frontier=rospy.Publisher('/frontier_detector/frontier',OccupancyGrid, queue_size=10)
-        self.pub_frontier_waypoint = rospy.Publisher('/frontier_detector/frontier_waypoint', PoseStamped, queue_size= 10)
+         #holds used centroid indices, gets reset during calculation
         
-        rospy.Subscriber('/path_planner/cspace_occgrid',OccupancyGrid,self.find_frontiers)
-        # request_frontier_centroid = rospy.service('frontier_centroid_service')    
+        self.pub_Frontier = rospy.Publisher('/frontier_detector/frontier',OccupancyGrid, queue_size=10)
+        self.pub_frontier_waypoint = rospy.Publisher('/frontier_detector/frontier_waypoint', PoseStamped, queue_size= 10)
+        self.pub_robot_state=rospy.Publisher('robot_state',String, queue_size=10)
 
+        rospy.Subscriber('/path_planner/cspace_occgrid',OccupancyGrid,self.find_frontiers)
+        rospy.Subscriber('/drive/awaitingPath',Empty,self.detect_closest_centroid)
+        
+        # request_frontier_centroid = rospy.service('frontier_centroid_service')
+        self.centroidOld=(0,0)
+        self.initialPosition=rospy.wait_for_message('/drive/currpose',PoseStamped)
+        rospy.loginfo("Frontier detector node ready")      
         rospy.sleep(1.0)
 
     @staticmethod
@@ -55,12 +62,12 @@ class frontier_detector:
         :return 
         """
         rospy.loginfo("Finding Frontiers")
-
-        frontierData=self.find_boundary(mapdata)
-        self.pub_Frontier.publish(frontierData)
+        self.map=mapdata
+        self.frontierData=self.find_boundary(mapdata)
+        self.pub_Frontier.publish(self.frontierData)
         rospy.loginfo("Publishing Frontier Map")
 
-        frontierCentroid=self.find_centroid_and_members(frontierData,mapdata)
+        # rospy.loginfo(self.frontierList)
         # frontierCentroid = self.find_centroid(mapdata,frontierData)
         # self.pub_frontier_centroid.publish(frontierCentroid)
         rospy.loginfo("Publishing Frontier Centroid")
@@ -84,17 +91,38 @@ class frontier_detector:
         ## go through each of the points addding them together and then take the average
         c_x = 0
         c_y = 0
-        n = len(frontier_data.data)
-
-        point= frontier_data[n//2]
-
+        n = len(frontier_data)
+        avgX=0
+        avgY=0
+        distOld=100000
+        for i in frontier_data:
+            avgX+=i[0]
+            avgY+=i[1]
+        avgX=avgX//n
+        avgY=avgY//n
+        ##just finds roughly the centroid based off of the given points found
+        for i in frontier_data:
+            dist=PathPlanner.euclidean_distance(i[0],i[1],avgX,avgY)
+            if(distOld>dist):
+                distOld=dist
+                point=i
+        # # rospy.loginfo(frontier_data)
+        # point = frontier_data[n//2]
+        rospy.loginfo("Centroid Calc")
+        rospy.loginfo(frontier_data)
+        rospy.loginfo(avgX)
+        rospy.loginfo(avgY)
+        rospy.loginfo(point)
         c_x = point[0]
         c_y = point[1]
 
         return (c_x,c_y)
         
-        
+    
+
     def find_centroid_and_members(self, frontierPoints, mapdata):
+
+        usedcentroids = []
 
         """
         For each point that is a frontier and had not been used, 
@@ -103,41 +131,40 @@ class frontier_detector:
 
             Calculate the centroid and put it as the 0th index
 
-        return the list of lists
+        return the list of lists 
         
         """
 
         width = mapdata.info.width
         height = mapdata.info.height
 
-        usedPoints = [0] * len(frontierPoints)
+        usedPoints = [0] * len(frontierPoints.data)
         pointsToVisit = [] ## queue
         currentFrontierIndex = 0
+        centroids=[]
 
-        frontiers = [] ## List of lists
-
-        for i in frontierPoints:
-
+        for i, pointVal in enumerate(frontierPoints.data):
+            
+            
             ## If it's a frontier point and unused
-            if (i == 100) and usedPoints[i] == 0:
+            if (pointVal == 100) and usedPoints[i] == 0:
 
-                pointsToVisit.append[i]
+                pointsToVisit.append(i)
 
                 ## For each point surrounding i, that is in range of the grid
                     ## if it is also a frontier point, add it to the priority queue
-
-                index
-                pointNumber = 1
-                while not (pointsToVisit == []):
-                    index = pointsToVisit.pop
+                frontierTemp=[]
+                while(len(pointsToVisit)>0):
+                    # rospy.loginfo(pointsToVisit)
+                    
+                    index = pointsToVisit.pop()
                     usedPoints[index] = 1
 
-                    workingPoint = PathPlanner.index_to_grid(i)
+                    workingPoint = PathPlanner.index_to_grid(mapdata, index)
 
-                    frontiers[currentFrontierIndex][pointNumber] = workingPoint
-
-                    pointX = workingPoint(0)
-                    pointY = workingPoint(1)
+                    frontierTemp.append(workingPoint)
+                    pointX = workingPoint[0]
+                    pointY = workingPoint[1]
 
                     ##Iterates through Y
                     for k in range(-1, 2, 1): ## If k == padding, it would end up being false in k < padding
@@ -152,54 +179,122 @@ class frontier_detector:
                             ## If within the grid
                             if (workingY in range(0, height - 1 )) and (workingX in range(0, width - 1)):
 
-                                    workingIndex = PathPlanner.grid_to_index(mapdata, workingX, workingY)
+                                workingIndex = PathPlanner.grid_to_index(mapdata, workingX, workingY)
 
-                                    if(index == workingIndex):
-                                        continue ##don't consider the cell itself or you will end up in a loop
-                                    elif(frontierPoints[workingIndex] == 100):
-                                        pointsToVisit.append[workingIndex]
+                            # if(index == workingIndex):
+                            #     continue ##don't consider the cell itself or you will end up in a loop
+                                if(frontierPoints.data[workingIndex] == 100 and usedPoints[workingIndex]== 0):
+                                    pointsToVisit.append(workingIndex)
+                                    # rospy.loginfo("Point to visit")
+                                    # rospy.loginfo(pointsToVisit)
+                                
                         #end of l loop        
                     #end of k loop
-
-                    
                 ##end of While loop
+                
 
+                # rospy.loginfo('frontiers')
+                # rospy.loginfo(frontierTemp)
                 ##done looping through a group of frontier points
-                frontiers[currentFrontierIndex][0] = self.find_centroid(frontiers[1:len(frontiers[currentFrontierIndex])])
-            
+                centroids.append(self.find_centroid(frontierTemp))
+
+                # frontierFinal=[]
+                # frontierFinal.append(frontierCentroid)
+                # frontierFinal.append(frontierTemp)
+                # frontiers.append(frontierFinal)
+
                 ## Iterates through frontier numbers
                 
-                currentFrontierIndex += 1
+            currentFrontierIndex += 1
 
 
             ##end of if frontier cell
 
         ##end of i loop
 
+        return centroids
 
-    def detect_closest_centroid(self,current,frontierList):
+    def detect_closest_centroid(self, msg):
+        curr_pose = rospy.wait_for_message('/drive/currpose',PoseStamped)
+        rospy.loginfo("Goal Request Recieved")
+        current = PathPlanner.world_to_grid(self.map, curr_pose.pose.position)
+        centroids=[]
+        centroids=self.find_centroid_and_members(self.frontierData,self.map)
 
-        firstFrontier = frontierList[0][0]     
-        min = PathPlanner.euclidean_distance(current[0],current[1],firstFrontier[0],firstFrontier[1])
-        indexOfClosestCentroid = 0 
 
-        for i in range(1,len(frontierList) + 1):
-            frontierCentroid = frontierList[i][0]
-            dist = PathPlanner.euclidean_distance(current[0],current[1],frontierCentroid[0],frontierCentroid[1])
+        centroids_and_distances = {}
+        #making a list of all the centroids
 
-            if (min > dist):
-                min = dist
-                indexOfClosestCentroid = i
-
-        closestCentroidPoint = frontierList[indexOfClosestCentroid][0]
-        closestCentroid = PoseStamped()
-        closestCentroid.header.frame_id = ('map')
-        closestCentroid.pose.position.x = closestCentroidPoint[0]
-        closestCentroid.pose.position.y = closestCentroidPoint[1]
-        closestCentroid.pose.position.z = 0
-
-        return closestCentroid           
+        # for i in frontierList:
+        #         firstFrontier = i
+        #         centroid=firstFrontier[0]    
+        #         centroids.append(centroid)
  
+
+        indexOfClosestCentroid = 0 
+        firstCentroid = centroids[0] 
+        min = PathPlanner.euclidean_distance(current[0], current[1], firstCentroid[0], firstCentroid[1])
+    
+        # Robot perfers to go to a frontier near the one it last visited
+        for centroid in centroids:
+            dist = PathPlanner.euclidean_distance(self.centroidOld[0],self.centroidOld[1],centroid[0],centroid[1])
+            centroids_and_distances[centroid]=dist
+            rospy.loginfo(dist)
+            
+            if(dist<10):
+                closestCentroidPoint = centroid
+                closestCentroid = PoseStamped()
+                centroidPoint=PathPlanner.grid_to_world(self.map,closestCentroidPoint[0],closestCentroidPoint[1])
+                closestCentroid.header=curr_pose.header
+                closestCentroid.pose.position=centroidPoint
+                closestCentroid.pose.orientation=curr_pose.pose.orientation
+                self.pub_frontier_waypoint.publish(closestCentroid)
+                success = rospy.wait_for_message('/path_planner/success', Bool)
+                rospy.loginfo(success)
+                if success.data==True:
+                    rospy.loginfo("Perfering to visit most reently visited frontier")
+                    self.centroidOld=centroid
+                    return True
+                        
+        
+                 
+
+
+        # distances=centroids_and_distances.get()
+        # distances.sort
+
+        # sorted_centroids = dict(sorted(centroids_and_distances.items(), key=lambda item: item[1]))
+        for centroid in centroids:
+            closestCentroidPoint = centroid
+            closestCentroid = PoseStamped()
+            centroidPoint=PathPlanner.grid_to_world(self.map,closestCentroidPoint[0],closestCentroidPoint[1])
+            closestCentroid.header=curr_pose.header
+            closestCentroid.pose.position=centroidPoint
+            closestCentroid.pose.orientation=curr_pose.pose.orientation
+            self.pub_frontier_waypoint.publish(closestCentroid)
+            success = rospy.wait_for_message('/path_planner/success', Bool)
+            rospy.loginfo(success)
+            if success.data==True:
+                rospy.loginfo("Valid path to a frontier found")
+                self.centroidOld=centroid
+                return True
+        
+        # if(not success):
+        self.pub_robot_state.publish("Return")
+        self.pub_frontier_waypoint.publish(self.initialPosition)
+
+               
+ 
+ 
+    # def isNotUsed(self, index):
+
+    #     for item in self.usedcentroids:
+    #          if(index == item):
+    #             return False
+
+    #     return True
+
+    
 
     def find_boundary(self, mapdata):    
 
@@ -213,7 +308,7 @@ class frontier_detector:
         frontierData = [0] * len(mapdata.data)
         for i, j in enumerate(mapdata.data):
            
-            if(j>=0 and j<50):
+            if(j >= 0 and j < 50):
                 point = PathPlanner.index_to_grid(mapdata, i)
                 
                 for k in range(-1, 2, 1): ## If k == padding, it would end up being false in k < padding
@@ -292,7 +387,7 @@ class frontier_detector:
     def run(self):
         """
         Runs the node until Ctrl-C is pressed.
-        """
+        """        
         rospy.spin()
 
 

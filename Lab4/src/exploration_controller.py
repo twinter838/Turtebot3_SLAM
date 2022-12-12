@@ -14,8 +14,7 @@ class exploration_controller:
         rospy.init_node("exploration_controller")
         rospy.Subscriber('robot_state',String, self.update_robot_state())
         rospy.Subscriber('get_frontiers',String, self.update_robot_state())
-        self.pub_robot_state=rospy.Publisher('robot_state',String)
-        self.requestPath = rospy.ServiceProxy('plan_path', GetPlan)
+        self.pub_robot_state=rospy.Publisher('robot_state',String, queue_size=10)
         
     def explore(self):
         self.pub_robot_state.publish("Exploration")

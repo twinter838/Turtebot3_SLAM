@@ -1,0 +1,23 @@
+<launch>
+
+  
+  <node name="Drive" pkg="Lab4" type="drive.py" output="screen"/>
+  <node name="path_planner" pkg="Lab4" type="path_planner.py"/>
+  <node name="path_requester" pkg="Lab4" type="path_requester.py"/>
+  <node name="map_server" pkg="map_server" type="map_server" args="$(find Lab4)/maps/map.yaml" />
+  <!--node name="static_transform_publisher" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0 /map /odom 100"/-->
+  
+  <arg name="isSimulation" default="true" /> 
+  <group if="$(arg isSimulation)">
+   <include file="$(find Lab4)/launch/maze_sim.launch"/>
+   <include file="$(find Lab4)/launch/practice_exploration.launch"/>   
+  </group>
+  
+  
+  <group unless="$(arg isSimulation)">
+    <include file="$(find Lab4)/launch/AMCL_bringup.launch"/>
+    <include file="$(find Lab4)/launch/amcl.launch"/>
+  </group>
+  
+  
+</launch>

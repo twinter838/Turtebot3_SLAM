@@ -7,6 +7,7 @@ from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Twist
 from tf.transformations import euler_from_quaternion
 import tf.transformations
+from std_msgs.msg import Empty,String
 
 class Lab2:
 
@@ -23,6 +24,11 @@ class Lab2:
         rospy.init_node('Drive')
         ### Tell ROS that this node publishes Twist messages on the '/cmd_vel' topic
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
+        self.pub_awaitingPath=rospy.Publisher('/drive/awaitingPath',Empty, queue_size= 10)
+        self.pub_currpose=rospy.Publisher('/drive/currpose',PoseStamped, queue_size= 10)
+        self.pub_robot_state=rospy.Publisher('robot_state',String, queue_size=10)
+        rospy.Subscriber('robot_state',String,self.handleRobotState)
+
         # TODO
         ### Tell ROS that this node subscribes to Odometry messages on the '/odom' topic
         ### When a message is received, call self.update_odometry
@@ -35,9 +41,11 @@ class Lab2:
         rospy.Subscriber('/path_planner/path', Path,self.drive_path)
         self.pathRunning=False
         self.listener=tf.TransformListener()
+        self.newPathRecieved=False
         # delete this when you implement your code
         
-
+    def handleRobotState(self,msg):
+        self.robotState=msg.data
 
 
     def send_speed(self, linear_speed, angular_speed):
@@ -67,15 +75,37 @@ class Lab2:
 
     def drive_path(self,msg):
         rospy.sleep(0.11)
-        if(not(self.path.poses==msg.poses)):
-            rospy.loginfo("Aborting Path")
-            return None
-        else:
-            self.arc_to(self.path.poses[0])
-            rospy.sleep(2)
+        if(self.robotState=="Exploration"):
+            dist=0
+            driveList=[]
+            if(len(msg.poses)>1):
+                driveList.append(msg.poses[0])
+                for index,point in enumerate(msg.poses):
+                    if(index<(len(msg.poses)-2)):
+                        point1=msg.poses[index+1]
+                        point2=msg.poses[index+2]
+                        dist+=math.sqrt(math.pow(point1.pose.position.x-point2.pose.position.x,2) + math.pow(point1.pose.position.x-point2.pose.position.y,2))
+                        if(dist<.1):
+                            driveList.append(point1)
+                        else:
+                            break
 
-
-
+            if(not(self.path.poses==msg.poses)):
+                rospy.loginfo("Aborting Path")
+                return None
+            else:
+                for i in driveList:
+                    self.arc_to(i)
+            rospy.sleep(3)
+            if(self.path.poses==msg.poses):
+                self.pub_awaitingPath.publish()
+        elif(self.robotState=="Return"):
+            for i in msg.poses:
+                if(not(self.path.poses==msg.poses)):
+                    rospy.loginfo("Aborting Path")
+                    return None
+                else:
+                    self.arc_to(i)
 
 
 
@@ -153,13 +183,13 @@ class Lab2:
         :param angular_speed [float] [rad/s] The angular speed.
         """
         KpHeading = 1.5
-        KiHeading = 0.002
+        KiHeading = 0.02
         errorThetaAcc = 0
         errorTheta = self.normalize_angle(self.normalize_angle_positive(angle) - self.normalize_angle_positive(self.pth))
         ### REQUIRED CREDIT
         angleOld=self.pth
         angle=self.normalize_angle(angle+angleOld)
-        while abs(errorTheta) > 0.05 and self.newPathRecieved==False:
+        while abs(errorTheta) > 0.03 and self.newPathRecieved==False:
             errorTheta = self.normalize_angle(self.normalize_angle_positive(angle) - self.normalize_angle_positive(self.pth))
             effortTheta = (errorTheta * KpHeading) + (KiHeading * errorThetaAcc)
             errorThetaAcc=errorTheta+errorThetaAcc
@@ -226,13 +256,23 @@ class Lab2:
         # TODO
 
         try:
-            (trans,rot) = self.listener.lookupTransform('/odom', '/base_footprint', rospy.Time(0))
+            (trans,rot) = self.listener.lookupTransform('/map', '/base_footprint', rospy.Time(0))
             self.px = trans[0]
             self.py = trans[1]
             quat_orig = rot
             quat_list = [rot[0], rot[1], rot[2], rot[3]]
             (roll , pitch , yaw) = euler_from_quaternion(quat_list)
             self.pth = yaw
+            pose=PoseStamped()
+            pose.pose.position.x=self.px
+            pose.pose.position.y=self.py
+            pose.pose.position.z=0
+            pose.pose.orientation.x=rot[0]
+            pose.pose.orientation.y=rot[1]
+            pose.pose.orientation.z=rot[2]
+            pose.pose.orientation.w=rot[3]
+            pose.header.frame_id=('map')
+            self.pub_currpose.publish(pose)
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             pass
 
@@ -247,7 +287,7 @@ class Lab2:
         print("Starting Arc to")
         #PID values
         KpHeading = 1
-        KiHeading = 0.01
+        KiHeading = 0.015
         KpDistance = 1.1
         KiDistance = 0.001
 
@@ -267,8 +307,11 @@ class Lab2:
         ## Rotate to target
         print("Rotating")
         print(yawAngle)
+        errorTheta = self.normalize_angle(self.normalize_angle_positive(math.atan2((waypointY - self.py),(waypointX - self.px))) - self.normalize_angle_positive(self.pth))
+
+
         self.rotate(self.normalize_angle(yawAngle-self.pth),1)
-        while(errorDistance) > 0.01 and self.newPathRecieved==False:
+        while(errorDistance) > 0.03 and self.newPathRecieved==False:
             #Errors
             errorTheta = self.normalize_angle(self.normalize_angle_positive(math.atan2((waypointY - self.py),(waypointX - self.px))) - self.normalize_angle_positive(self.pth))
 
@@ -320,13 +363,10 @@ class Lab2:
         print("Finished Smooth Drive")
 
     def run(self):
-        rospy.sleep(0.5)
-        # while not rospy.is_shutdown():
-            
-        #     rospy.sleep(0.1)
-
-        #     print("Pose X="+self.px)
-        #     print("Pose Y="+self.py)
+        rospy.wait_for_message('/odom',Odometry)
+        self.pub_robot_state.publish("Exploration")
+        rospy.sleep(5)
+        self.pub_awaitingPath.publish()
         rospy.spin()
 if __name__ == '__main__':
     Lab2().run()

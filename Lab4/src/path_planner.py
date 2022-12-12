@@ -7,7 +7,8 @@ from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
 from geometry_msgs.msg import Point, Pose, PoseStamped
 from priority_queue import PriorityQueue
-from std_srvs.srv import Empty,SetBool
+from std_msgs.msg import Bool
+from std_srvs.srv import SetBool
 class PathPlanner:
 
 
@@ -44,6 +45,8 @@ class PathPlanner:
         self.pub_PathOld = rospy.Publisher('/path_planner/pathOld', Path, queue_size=10)
         self.pub_Visited=rospy.Publisher('/path_planner/visited', GridCells, queue_size=10)
         self.pub_Raycast=rospy.Publisher('/path_planner/raycast', GridCells, queue_size=10)
+        self.pub_PathSuccess=rospy.Publisher('/path_planner/success', Bool, queue_size=10)
+
         mapdata=rospy.wait_for_message('/map',OccupancyGrid)
         ## Initialize the request counter
 
@@ -250,6 +253,7 @@ class PathPlanner:
         rospy.loginfo("Checking Path Validity")
         if(not(self.path_still_walkable(cspaceData)) and len(self.waypointsOpt)>0):
             rospy.loginfo("Requesting New Path as old is invalid")
+            rospy.sleep(2.5)
             self.requestNewPath()
 
     def calc_cspace(self, mapdata, padding):
@@ -412,10 +416,11 @@ class PathPlanner:
         path.reverse()
         rospy.loginfo("Finished A*")
         rospy.loginfo(path)
-
-
-
-        return path
+        if(not(path[len(path)-1]==goal)):
+            success=False
+        else:
+            success=True
+        return path, success
 
 
     
@@ -575,7 +580,7 @@ class PathPlanner:
                     return False
                 favorability+=mapdata.data[PathPlanner.grid_to_index(mapdata,int(round(x)),int(round(y)))]
 
-        if(favorability/raycastLen>50):
+        if(favorability/raycastLen>50 or favorability>300):
             return False
         # rospy.loginfo('Visible LOS')
         return True
@@ -643,10 +648,15 @@ class PathPlanner:
         ## Calculate the C-space and publish it
         self.cspacedata = self.calc_cspace(mapdata, 2)
         ## Execute A*
-        costmap=self.calc_costmap(self.cspacedata,4)
+        costmap=self.calc_costmap(self.cspacedata,5)
         start = PathPlanner.world_to_grid(mapdata, msg.start.pose.position)
         goal  = PathPlanner.world_to_grid(mapdata, msg.goal.pose.position)
-        path  = self.a_star(self.cspacedata,costmap,start, goal)
+        AstarData  = self.a_star(self.cspacedata,costmap,start, goal)
+        path=AstarData[0]
+        success=AstarData[1]
+        self.pub_PathSuccess.publish(success)
+        if(success==False):
+            return Path()
         ## Optimize waypoints
         waypoints = PathPlanner.optimize_path(path)
         ## Return a Path message

@@ -1,7 +1,7 @@
 <launch>
 
   
-  <node name="Drive" pkg="Lab4" type="drive.py"/>
+  <node name="Drive" pkg="Lab4" type="drive.py" output="screen"/>
   <node name="path_planner" pkg="Lab4" type="path_planner.py"/>
   <node name="path_requester" pkg="Lab4" type="path_requester.py"/>
   <node name="frontier_detector" pkg="Lab4" type="frontier_detector.py" output="screen"/>
