@@ -247,7 +247,7 @@ class PathPlanner:
         return mapdata
 
     def request_CSpace(self,mapdata):
-        cspaceData=(self.calc_cspace(mapdata,2))
+        cspaceData=(self.calc_cspace(mapdata,3))
         rospy.loginfo("Recheking CSpace")
         self.pub_CSpaceOccGrid.publish(cspaceData)
         rospy.loginfo("Checking Path Validity")
@@ -646,7 +646,7 @@ class PathPlanner:
         if mapdata is None:
             return Path()
         ## Calculate the C-space and publish it
-        self.cspacedata = self.calc_cspace(mapdata, 2)
+        self.cspacedata = self.calc_cspace(mapdata, 3)
         ## Execute A*
         costmap=self.calc_costmap(self.cspacedata,5)
         start = PathPlanner.world_to_grid(mapdata, msg.start.pose.position)

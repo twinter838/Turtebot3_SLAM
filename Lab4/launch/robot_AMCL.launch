@@ -2,6 +2,7 @@
 
   
   <node name="Drive" pkg="Lab4" type="drive.py" output="screen"/>
+  <node name="amcl_controller" pkg="Lab4" type="amcl_controller.py" output="screen"/>
   <node name="path_planner" pkg="Lab4" type="path_planner.py"/>
   <node name="path_requester" pkg="Lab4" type="path_requester.py"/>
   <node name="map_server" pkg="map_server" type="map_server" args="$(find Lab4)/maps/map.yaml" />

@@ -38,14 +38,14 @@ class PathRequester:
         curr_pose = rospy.wait_for_message('/drive/currpose',PoseStamped)
         plan=GetPlan()
         path=Path()
-        plan.goal=self.goal
-        plan.start=PoseStamped()
-        plan.start.pose.position.x=curr_pose.pose.position.x
-        plan.start.pose.position.y=curr_pose.pose.position.y
+        plan.goal = self.goal
+        plan.start = PoseStamped()
+        plan.start.pose.position.x = curr_pose.pose.position.x
+        plan.start.pose.position.y = curr_pose.pose.position.y
         plan.start.pose.position.z=0
         plan.start.header.frame_id=('map')
         plan.start.pose.orientation=curr_pose.pose.orientation
-        plan.tolerance=0.05
+        plan.tolerance = 0.05
         path=self.requestPath(plan.start,plan.goal,plan.tolerance)
         return True,"Path Planned"
 

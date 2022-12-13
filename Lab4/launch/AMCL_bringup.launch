@@ -12,5 +12,5 @@
     <param name="rate" value="50"/>
   </node>
 
-  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find Lab4)/rviz/rbe3002_lab4_AMCL.rviz"/>
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find Lab4)/rviz/amcl.rviz"/>
 </launch>

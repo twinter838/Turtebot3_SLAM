@@ -10,7 +10,7 @@ from std_msgs.msg import String,Empty
 from priority_queue import PriorityQueue
 from std_srvs.srv import Empty,SetBool
 from std_msgs.msg import Bool,Empty
-
+from nav_msgs.msg import Odometry,Path
 class frontier_detector:
    
 
@@ -70,7 +70,7 @@ class frontier_detector:
         # rospy.loginfo(self.frontierList)
         # frontierCentroid = self.find_centroid(mapdata,frontierData)
         # self.pub_frontier_centroid.publish(frontierCentroid)
-        rospy.loginfo("Publishing Frontier Centroid")
+        # rospy.loginfo("Publishing Frontier Centroid")
         
 
         """"
@@ -92,14 +92,14 @@ class frontier_detector:
         c_x = 0
         c_y = 0
         n = len(frontier_data)
-        avgX=0
-        avgY=0
-        distOld=100000
+        avgX = 0
+        avgY = 0
+        distOld = 100000
         for i in frontier_data:
-            avgX+=i[0]
-            avgY+=i[1]
-        avgX=avgX//n
-        avgY=avgY//n
+            avgX += i[0]
+            avgY += i[1]
+        avgX = avgX//n
+        avgY = avgY//n
         ##just finds roughly the centroid based off of the given points found
         for i in frontier_data:
             dist=PathPlanner.euclidean_distance(i[0],i[1],avgX,avgY)
@@ -141,7 +141,7 @@ class frontier_detector:
         usedPoints = [0] * len(frontierPoints.data)
         pointsToVisit = [] ## queue
         currentFrontierIndex = 0
-        centroids=[]
+        centroids = []
 
         for i, pointVal in enumerate(frontierPoints.data):
             
@@ -218,8 +218,8 @@ class frontier_detector:
         curr_pose = rospy.wait_for_message('/drive/currpose',PoseStamped)
         rospy.loginfo("Goal Request Recieved")
         current = PathPlanner.world_to_grid(self.map, curr_pose.pose.position)
-        centroids=[]
-        centroids=self.find_centroid_and_members(self.frontierData,self.map)
+        centroids = []
+        centroids = self.find_centroid_and_members(self.frontierData,self.map)
 
 
         centroids_and_distances = {}
@@ -238,20 +238,20 @@ class frontier_detector:
         # Robot perfers to go to a frontier near the one it last visited
         for centroid in centroids:
             dist = PathPlanner.euclidean_distance(self.centroidOld[0],self.centroidOld[1],centroid[0],centroid[1])
-            centroids_and_distances[centroid]=dist
+            centroids_and_distances[centroid] = dist
             rospy.loginfo(dist)
             
             if(dist<10):
                 closestCentroidPoint = centroid
                 closestCentroid = PoseStamped()
                 centroidPoint=PathPlanner.grid_to_world(self.map,closestCentroidPoint[0],closestCentroidPoint[1])
-                closestCentroid.header=curr_pose.header
-                closestCentroid.pose.position=centroidPoint
-                closestCentroid.pose.orientation=curr_pose.pose.orientation
+                closestCentroid.header = curr_pose.header
+                closestCentroid.pose.position = centroidPoint
+                closestCentroid.pose.orientation = curr_pose.pose.orientation
                 self.pub_frontier_waypoint.publish(closestCentroid)
                 success = rospy.wait_for_message('/path_planner/success', Bool)
                 rospy.loginfo(success)
-                if success.data==True:
+                if success.data == True:
                     rospy.loginfo("Perfering to visit most reently visited frontier")
                     self.centroidOld=centroid
                     return True
@@ -267,14 +267,14 @@ class frontier_detector:
         for centroid in centroids:
             closestCentroidPoint = centroid
             closestCentroid = PoseStamped()
-            centroidPoint=PathPlanner.grid_to_world(self.map,closestCentroidPoint[0],closestCentroidPoint[1])
-            closestCentroid.header=curr_pose.header
-            closestCentroid.pose.position=centroidPoint
-            closestCentroid.pose.orientation=curr_pose.pose.orientation
+            centroidPoint = PathPlanner.grid_to_world(self.map,closestCentroidPoint[0],closestCentroidPoint[1])
+            closestCentroid.header = curr_pose.header
+            closestCentroid.pose.position = centroidPoint
+            closestCentroid.pose.orientation = curr_pose.pose.orientation
             self.pub_frontier_waypoint.publish(closestCentroid)
             success = rospy.wait_for_message('/path_planner/success', Bool)
             rospy.loginfo(success)
-            if success.data==True:
+            if success.data == True:
                 rospy.loginfo("Valid path to a frontier found")
                 self.centroidOld=centroid
                 return True
@@ -387,7 +387,9 @@ class frontier_detector:
     def run(self):
         """
         Runs the node until Ctrl-C is pressed.
-        """        
+        """       
+        rospy.wait_for_message('/odom',Odometry)
+        self.pub_robot_state.publish("Exploration")
         rospy.spin()
 
 

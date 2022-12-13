@@ -26,8 +26,8 @@ class Lab2:
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.pub_awaitingPath=rospy.Publisher('/drive/awaitingPath',Empty, queue_size= 10)
         self.pub_currpose=rospy.Publisher('/drive/currpose',PoseStamped, queue_size= 10)
-        self.pub_robot_state=rospy.Publisher('robot_state',String, queue_size=10)
-        rospy.Subscriber('robot_state',String,self.handleRobotState)
+        self.pub_robot_state=rospy.Publisher('/robot_state',String, queue_size=10)
+        rospy.Subscriber('/robot_state',String,self.handleRobotState)
 
         # TODO
         ### Tell ROS that this node subscribes to Odometry messages on the '/odom' topic
@@ -47,7 +47,11 @@ class Lab2:
     def handleRobotState(self,msg):
         self.robotState=msg.data
 
-
+    def spin(self):
+        while(self.robotState=="Localization"):
+            self.send_speed(0,0.6)
+        self.send_speed(0,0)
+        
     def send_speed(self, linear_speed, angular_speed):
         """
         Sends the speeds to the motors.
@@ -79,7 +83,7 @@ class Lab2:
             dist=0
             driveList=[]
             if(len(msg.poses)>1):
-                driveList.append(msg.poses[0])
+                driveList.append(msg.poses[0],0.08)
                 for index,point in enumerate(msg.poses):
                     if(index<(len(msg.poses)-2)):
                         point1=msg.poses[index+1]
@@ -95,17 +99,17 @@ class Lab2:
                 return None
             else:
                 for i in driveList:
-                    self.arc_to(i)
+                    self.arc_to(i,0.2)
             rospy.sleep(3)
             if(self.path.poses==msg.poses):
                 self.pub_awaitingPath.publish()
-        elif(self.robotState=="Return"):
+        elif(self.robotState=="Return" or self.robotState=="Localized"):
             for i in msg.poses:
                 if(not(self.path.poses==msg.poses)):
                     rospy.loginfo("Aborting Path")
                     return None
                 else:
-                    self.arc_to(i)
+                    self.arc_to(i,0.2)
 
 
 
@@ -278,7 +282,7 @@ class Lab2:
 
 
 
-    def arc_to(self, position):
+    def arc_to(self, position,maxSpeed):
         """
         Drives to a given position in an arc.
         :param msg [PoseStamped] The target pose.
@@ -323,8 +327,8 @@ class Lab2:
 
             errorThetaAcc=errorTheta+errorThetaAcc
             errorDistanceAcc=errorDistance+errorDistanceAcc
-            if(effortDistance>0.1):
-                effortDistance=0.05
+            if(effortDistance>maxSpeed):
+                effortDistance=maxSpeed
 
             self.send_speed(effortDistance,effortTheta)
 
@@ -364,8 +368,9 @@ class Lab2:
 
     def run(self):
         rospy.wait_for_message('/odom',Odometry)
-        self.pub_robot_state.publish("Exploration")
+        # self.pub_robot_state.publish("Exploration")
         rospy.sleep(5)
+        self.spin()
         self.pub_awaitingPath.publish()
         rospy.spin()
 if __name__ == '__main__':
