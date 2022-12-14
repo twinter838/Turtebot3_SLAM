@@ -220,7 +220,7 @@ Visualization Manager:
       Enabled: true
       Name: Path Validation
       Queue Size: 10
-      Topic: /path_planner/raycast
+      Topic: /path_planner/visited
       Unreliable: false
       Value: true
     - Alpha: 0.5
@@ -276,7 +276,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 4.64920711517334
+      Angle: 4.689206123352051
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -286,10 +286,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 367.2216491699219
+      Scale: 256.1597595214844
       Target Frame: map
-      X: -1.905724048614502
-      Y: -0.5028966069221497
+      X: -1.4570398330688477
+      Y: -0.24531543254852295
     Saved: ~
 Window Geometry:
   Displays:

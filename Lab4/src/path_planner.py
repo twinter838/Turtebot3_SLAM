@@ -2,12 +2,11 @@
 
 import math
 import rospy
-import string
 from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
 from geometry_msgs.msg import Point, Pose, PoseStamped
 from priority_queue import PriorityQueue
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, Int32,String
 from std_srvs.srv import SetBool
 class PathPlanner:
 
@@ -20,11 +19,11 @@ class PathPlanner:
         ### REQUIRED CREDIT
         ## Initialize the node and call it "path_planner"
         rospy.init_node("path_planner")
-        self.waypointsOpt=[]
+        self.waypointsOpt = []
         ## Create a new service called "plan_path" that accepts messages of
         ## type GetPlan and calls self.plan_path() when a message is received
         # TODO
-        plan_path=rospy.Service('plan_path',GetPlan,self.plan_path)
+        plan_path = rospy.Service('plan_path', GetPlan, self.plan_path)
         rospy.wait_for_service('request_new_path')
 
         self.requestNewPath = rospy.ServiceProxy('request_new_path', SetBool)
@@ -33,21 +32,22 @@ class PathPlanner:
         ## The topic is "/path_planner/cspace", the message type is GridCells
         # TODO
         rospy.Subscriber('/map',OccupancyGrid,self.request_CSpace)
+        rospy.Subscriber('/path_state',String,self.update_path_state)
         self.pub_CSpace = rospy.Publisher('/path_planner/cspace', GridCells, queue_size=10)
         self.pub_CSpaceOccGrid = rospy.Publisher('/path_planner/cspace_occgrid', OccupancyGrid, queue_size=10)
         self.pub_Costmap = rospy.Publisher('/path_planner/costmap', OccupancyGrid, queue_size=10)
-
+        self.planState = "Full"
         ## Create publishers for A* (expanded cells, frontier, ...)
         ## Choose a the topic names, the message type is GridCells
         # TODO
         self.pub_Frontier = rospy.Publisher('/path_planner/frontier', GridCells, queue_size=10)
         self.pub_Path = rospy.Publisher('/path_planner/path', Path, queue_size=10)
         self.pub_PathOld = rospy.Publisher('/path_planner/pathOld', Path, queue_size=10)
-        self.pub_Visited=rospy.Publisher('/path_planner/visited', GridCells, queue_size=10)
-        self.pub_Raycast=rospy.Publisher('/path_planner/raycast', GridCells, queue_size=10)
-        self.pub_PathSuccess=rospy.Publisher('/path_planner/success', Bool, queue_size=10)
-
-        mapdata=rospy.wait_for_message('/map',OccupancyGrid)
+        self.pub_Visited = rospy.Publisher('/path_planner/visited', GridCells, queue_size=10)
+        self.pub_Raycast = rospy.Publisher('/path_planner/raycast', GridCells, queue_size=10)
+        self.pub_PathSuccess = rospy.Publisher('/path_planner/success', Bool, queue_size=10)
+        self.pub_PathCost = rospy.Publisher('/path_planner/cost', Int32, queue_size=10)
+        mapdata = rospy.wait_for_message('/map',OccupancyGrid)
         ## Initialize the request counter
 
         ## Sleep to allow roscore to do some housekeeping
@@ -79,9 +79,6 @@ class PathPlanner:
     Implementing A star will take in our current occupancy map after adding C space and use wave method (confirmed that's what a star is)
     Possibly implement early exit? (The code ends and returns a path when it finds the end)
 
-    
-
-
     """
 
     @staticmethod
@@ -107,7 +104,7 @@ class PathPlanner:
         ### REQUIRED CREDIT
         x = index % mapdata.info.width
         y = index // mapdata.info.width
-        return x,y
+        return x, y
 
 
     @staticmethod
@@ -121,7 +118,7 @@ class PathPlanner:
         :return   [float]        The distance.
         """
         ### REQUIRED CREDIT
-        return(math.sqrt(math.pow(x1-x2,2)+math.pow(y1-y2,2)))
+        return(math.sqrt(math.pow(x1 - x2, 2) + math.pow(y1 - y2, 2)))
         
 
 
@@ -154,6 +151,7 @@ class PathPlanner:
         ## we do have a template, and the translation will be cellred/2 likely
         x = int((wp.x - mapdata.info.origin.position.x) / mapdata.info.resolution)
         y = int((wp.y - mapdata.info.origin.position.y) / mapdata.info.resolution)
+
         return(x,y)
 
         
@@ -181,7 +179,6 @@ class PathPlanner:
         :param y       [int]           The Y coordinate in the grid.
         :return        [boolean]       True if the cell is walkable, False otherwise
         """
-        ### REQUIRED CREDIT
         
         if(mapdata.data[PathPlanner.grid_to_index(mapdata,x,y)] >50 or x > mapdata.info.width or y > mapdata.info.height):
             return False
@@ -202,7 +199,7 @@ class PathPlanner:
         :param y       [int]           The Y coordinate in the grid.
         :return        [[(int,int)]]   A list of walkable 4-neighbors.
         """
-        ### REQUIRED CREDIT
+   
         walkableCells=[]
         neighbors_of_4 = [ (x,y+1),(x,y-1),(x+1,y),(x-1,y)]
         
@@ -223,8 +220,9 @@ class PathPlanner:
         :param y       [int]           The Y coordinate in the grid.
         :return        [[(int,int)]]   A list of walkable 8-neighbors.
         """
-        ### REQUIRED CREDIT
-        walkableCells=[]
+  
+        walkableCells = []
+
         neighbors_of_8 = [(x,y+1),(x,y-1),(x+1,y),(x-1,y),(x+1,y+1),(x-1,y-1),(x+1,y-1),(x-1,y+1)]
         
         for neighbor in neighbors_of_8 :
@@ -243,14 +241,16 @@ class PathPlanner:
         """
         ### REQUIRED CREDIT
         rospy.loginfo("Requesting the map")
-        mapdata=rospy.wait_for_message('/map',OccupancyGrid)
+        mapdata = rospy.wait_for_message('/map',OccupancyGrid)
         return mapdata
 
     def request_CSpace(self,mapdata):
-        cspaceData=(self.calc_cspace(mapdata,3))
+        cspaceData = (self.calc_cspace(mapdata,3))
         rospy.loginfo("Recheking CSpace")
+        
         self.pub_CSpaceOccGrid.publish(cspaceData)
         rospy.loginfo("Checking Path Validity")
+
         if(not(self.path_still_walkable(cspaceData)) and len(self.waypointsOpt)>0):
             rospy.loginfo("Requesting New Path as old is invalid")
             rospy.sleep(2.5)
@@ -264,10 +264,11 @@ class PathPlanner:
         :param padding [int]           The number of cells around the obstacles.
         :return        [OccupancyGrid] The C-Space.
         """
-        ### REQUIRED CREDIT
         rospy.loginfo("Calculating C-Space")
+        
         ## Go through each cell in the occupancy grid
-        ## Inflatcopy.deepcopy(e the obstac)les where necessary     
+        ## Inflatcopy.deepcopy(e the obstacles where necessary  
+           
         CSpace = mapdata.data
         CSpace = list(CSpace)
 
@@ -298,8 +299,7 @@ class PathPlanner:
                     ## iterate
                 ## iterate
 
-                
-        # rospy.loginfo("THIS BABY IS THE ENTIRE AGENDA")
+
         CSpace = tuple(CSpace)
 
         ## Create a GridCells message and publish it
@@ -338,10 +338,10 @@ class PathPlanner:
         ## Inflatcopy.deepcopy(e the obstac)les where necessary     
         costmap = mapdata.data
         costmap = list(costmap)
-        padding=1
+        padding = 1
         mapWidth = mapdata.info.width
         mapHeight = mapdata.info.height
-        while(padding<paddingMax):
+        while(padding < paddingMax):
             for i, j in enumerate(mapdata.data):
                 if(j >= 80): ## If it's occupied
 
@@ -360,23 +360,30 @@ class PathPlanner:
 
                                 if workingX in range(0, mapWidth - 1):
                                     index = PathPlanner.grid_to_index(mapdata, workingX, workingY)
-                                    if((costmap[index]+3<100)):
-                                        costmap[index]+=3
+                                    if((costmap[index] + 3 < 100)):
+                                        costmap[index] += 3
                                     # printThis = str(workingX) + ' ' + str(workingY)
                                     # rospy.loginfo(printThis)
                         ## iterate
                     ## iterate
-            padding+=1
+            padding += 1
         CostmapOG = OccupancyGrid()
         CostmapOG.data = costmap
         CostmapOG.info = mapdata.info
         self.pub_Costmap.publish(CostmapOG)
         return CostmapOG
+
+    def update_path_state(self,msg):
+        self.planState = msg.data
+
+
+
+
     def a_star(self, mapdata,costmap, start, goal):
         ### REQUIRED CREDIT
         rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
-        msgVisted=GridCells()
-        msgVisted.header.frame_id=('map')
+        msgVisted = GridCells()
+        msgVisted.header.frame_id = ('map')
         msgVisted.cell_height = mapdata.info.resolution
         msgVisted.cell_width = mapdata.info.resolution
         frontier = PriorityQueue()
@@ -386,7 +393,7 @@ class PathPlanner:
         came_from[start] = None
         # came_from.append(start)
         cost_so_far[start] = 0
-        visited=[]
+        visited = []
         # cost_so_far.append(0)
 
         while not frontier.empty():
@@ -395,32 +402,45 @@ class PathPlanner:
             if current == goal:
                 break
             neighbors = PathPlanner.neighbors_of_8(mapdata,current[0], current[1])
+            
             for  next in neighbors:
                 ###TODO Add cost penalty for making turns
                 new_cost = cost_so_far[current] + PathPlanner.euclidean_distance(current[0], current[1], next[0], next[1])+costmap.data[PathPlanner.grid_to_index(mapdata,next[0],next[1])]
                 # rospy.loginfo(new_cost)
+                
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
                     cost_so_far[next] = new_cost
+                    
                     priority = new_cost + PathPlanner.euclidean_distance(goal[0],goal[1],next[0],next[1])
                     frontier.put(next, priority)
+                    
                     came_from[next] = current
                     visited.append(PathPlanner.grid_to_world(mapdata,next[0],next[1]))
                     # rospy.loginfo(visited)
-                    msgVisted.cells=visited
+                    msgVisted.cells = visited
+                    
                     self.pub_Visited.publish(msgVisted)
-        path=[]
+        
+        path = []
+        cost = cost_so_far[current]
+        cost = int(cost)
+        
         while current != start:
             path.append(current)
             current = came_from[current]
+
         path.append(start)
         path.reverse()
         rospy.loginfo("Finished A*")
         rospy.loginfo(path)
-        if(not(path[len(path)-1]==goal)):
-            success=False
+        
+        if(not(path[len(path) - 1] == goal)):
+            success = False
         else:
-            success=True
-        return path, success
+            success = True
+
+        rospy.loginfo(cost)
+        return path, success,cost
 
 
     
@@ -431,9 +451,8 @@ class PathPlanner:
         :param path [[(x,y)]] The path as a list of tuples (grid coordinates)
         :return     [[(x,y)]] The optimized path as a list of tuples (grid coordinates)
         """
-        ### EXTRA CREDIT
         
-        pathOpt=[]
+        pathOpt = []
         previousX = -1
         previousY = -1
 
@@ -459,12 +478,9 @@ class PathPlanner:
                 previousY = point[1]
     
     
-
-
-
-
-
         rospy.loginfo("Optimizing path")
+
+
 
     def string_puller(self,mapdata,path):
         """
@@ -472,22 +488,24 @@ class PathPlanner:
         :param path [[(int,int)]] The path on the grid (a list of tuples)
         :return     [[(int,int)]] The path on the grid optimized using string pulling (a list of tuples)
         """
-        pathOpt=[]
-        pointPrev=path[0]
+        pathOpt = []
+        pointPrev = path[0]
         pathOpt.append(pointPrev)
-        self.raycastList=[]
+        self.raycastList = []
         for index, point in enumerate(path):
+
             if(index+1<len(path)):
                 future=path[index + 1]
             else:
                 pathOpt.append(point)
                 rospy.loginfo(pathOpt)
                 return pathOpt
+
             if(self.raycast(mapdata,pointPrev,future)):
                 rospy.loginfo("Redundant Wapoint Removed")
             else:
                 pathOpt.append(point)
-                pointPrev=point
+                pointPrev = point
 
 
 
@@ -502,85 +520,100 @@ class PathPlanner:
         for index, point in enumerate(self.waypointsOpt):
             if(index+1<len(self.waypointsOpt)):
 
-                if(not (self.raycast(mapdata,point,self.waypointsOpt[index+1]))):
+                if(not (self.raycast(mapdata, point, self.waypointsOpt[index + 1]))):
                    return False
             else:
                 return True
 
 
-    def raycast(self,mapdata,point1,point2):
+
+    def raycast(self, mapdata, point1, point2):
         """
         Checks if there is a clear LOS between two points on the grid        
         :param point1 (int,int) The first point on the grid(tuple)
         :param point1 (int,int) The second point on the grid(tuple)
         :return isVisible      True if point is visible, false if not
         """
-        favorability=0
-        raycastMsg=GridCells()
-        raycastMsg.cell_height=mapdata.info.resolution
-        raycastMsg.cell_width=mapdata.info.resolution
-        raycastMsg.header.frame_id=('map')
-        raycastList=[]
+        favorability = 0
+        raycastMsg = GridCells()
+        raycastMsg.cell_height = mapdata.info.resolution
+        raycastMsg.cell_width = mapdata.info.resolution
+        raycastMsg.header.frame_id = ('map')
+        raycastList = []
         '''
         draw line between the points 
         see if there are any blocks in the way
         if no, return true, if yes, false
         '''
-        x1  = point1[0]
+        x1 = point1[0]
         y1 = point1[1]
-        raycastList=[]
-        raycastLen=1
+
+        raycastList = []
+        raycastLen = 1
+
         x2 = point2[0]
         y2 = point2[1]
+
         ## use for the loop 
-        x,y = point1[0],point1[1]
+        x, y = point1[0], point1[1]
+
         dx = (x2-x1)
         dy = (y2-y1)
-        x=point1[0]
-        y=point1[1]
-        if(abs(dx)>abs(dy)):
+
+        x = point1[0]
+        y = point1[1]
+
+        if(abs(dx) > abs(dy)):
             if(dx<0):
                 x1 = point2[0]
                 y1 = point2[1]
 
                 x2 = point1[0]
                 y2 = point1[1]
-            slope=dy/dx
-            indexX=0
+
+            slope = dy / dx
+            indexX = 0
             for x in range(x1,x2):
-                y=y1+indexX*slope
-                self.raycastList.append(PathPlanner.grid_to_world(mapdata,int(round(x)),int(round(y))))
-                raycastMsg.cells=self.raycastList
+                y = y1 + indexX * slope
+                self.raycastList.append(PathPlanner.grid_to_world(mapdata, int(round(x)) ,int(round(y))))
+                raycastMsg.cells = self.raycastList
                 self.pub_Raycast.publish(raycastMsg)
-                indexX+=1
-                raycastLen+=1
-                if(not PathPlanner.is_cell_walkable(mapdata,int(round(x)),int(round(y)))):
+                indexX += 1
+                raycastLen += 1
+                if(not PathPlanner.is_cell_walkable(mapdata, int(round(x)), int(round(y)))):
                     # rospy.loginfo("LOS Blocked")
                     return False
-                favorability+=mapdata.data[PathPlanner.grid_to_index(mapdata,int(round(x)),int(round(y)))]
+                favorability += mapdata.data[PathPlanner.grid_to_index(mapdata, int(round(x)), int(round(y)))]
 
-        elif(abs(dy)>abs(dx)):
-            slope=dx/dy
-            indexY=0
+        elif(abs(dy) > abs(dx)):
+            slope = dx/dy
+            indexY = 0
             if(dy<0):
                 x1 = point2[0]
                 y1 = point2[1]
 
                 x2 = point1[0]
                 y2 = point1[1]
-            for y in range(y1,y2):
-                x=x1+(indexY*slope)
+
+            for y in range(y1, y2):
+                x = x1 + (indexY * slope)
+
                 self.raycastList.append(PathPlanner.grid_to_world(mapdata,int(round(x)),int(round(y))))        
-                raycastMsg.cells=self.raycastList
+                
+                raycastMsg.cells = self.raycastList
+                
                 self.pub_Raycast.publish(raycastMsg)
-                indexY+=1
-                raycastLen+=1
-                if(not PathPlanner.is_cell_walkable(mapdata,int(round(x)),int(round(y)))):
+                
+                indexY += 1
+                raycastLen += 1
+
+                if(not PathPlanner.is_cell_walkable(mapdata, int(round(x)), int(round(y)))):
                     # rospy.loginfo("LOS Blocked")
                     return False
-                favorability+=mapdata.data[PathPlanner.grid_to_index(mapdata,int(round(x)),int(round(y)))]
 
-        if(favorability/raycastLen>50 or favorability>300):
+                favorability += mapdata.data[PathPlanner.grid_to_index(mapdata, int(round(x)), int(round(y)))]
+
+        if(favorability > 200):
             return False
         # rospy.loginfo('Visible LOS')
         return True
@@ -596,42 +629,51 @@ class PathPlanner:
         :return     [Path]        A Path message (the coordinates are expressed in the world)
         """
         ### REQUIRED CREDIT
-        pathMsg=Path()
-        pathMsg.header.frame_id=('map')
+        pathMsg = Path()
+        pathMsg.header.frame_id = ('map')
         path.pop(0)
 
-        poses=[]
+        poses = []
         for gridPoint in path:
-            pose=PoseStamped()
-            pose.header.frame_id=('map')
-            waypoint=PathPlanner.grid_to_world(mapdata,gridPoint[0],gridPoint[1])
-            pose.pose.position=waypoint
+            pose = PoseStamped()
+            pose.header.frame_id = ('map')
+
+            waypoint = PathPlanner.grid_to_world(mapdata,gridPoint[0],gridPoint[1])
+            pose.pose.position = waypoint
+
             poses.append(pose)
-        pathMsg.poses=poses
+
+        pathMsg.poses = poses
         self.pub_Path.publish(pathMsg)
         self.pub_PathOld.publish(pathMsg)
         rospy.loginfo("Returning a Path message")
         return pathMsg
+
+
     def path_to_message_altTopic(self, mapdata, path):
         """
         Takes a path on the grid and returns a Path message.
         :param path [[(int,int)]] The path on the grid (a list of tuples)
         :return     [Path]        A Path message (the coordinates are expressed in the world)
         """
-        ### REQUIRED CREDIT
-        pathMsg=Path()
-        pathMsg.header.frame_id=('map')
+     
+        pathMsg = Path()
+        pathMsg.header.frame_id = ('map')
 
-        poses=[]
+        poses = []
         for gridPoint in path:
-            pose=PoseStamped()
-            pose.header.frame_id=('map')
-            waypoint=PathPlanner.grid_to_world(mapdata,gridPoint[0],gridPoint[1])
-            pose.pose.position=waypoint
+            pose = PoseStamped()
+            pose.header.frame_id = ('map')
+            waypoint = PathPlanner.grid_to_world(mapdata,gridPoint[0],gridPoint[1])
+            
+            pose.pose.position = waypoint
             poses.append(pose)
-        pathMsg.poses=poses
+
+        pathMsg.poses = poses
+        
         self.pub_PathOld.publish(pathMsg)
         rospy.loginfo("Returning a Path message")
+        
         return pathMsg
     
     def plan_path(self, msg):
@@ -642,25 +684,37 @@ class PathPlanner:
         """
         ## Request the map
         ## In case of error, return an empty path
+        
         mapdata = PathPlanner.request_map()
         if mapdata is None:
             return Path()
         ## Calculate the C-space and publish it
         self.cspacedata = self.calc_cspace(mapdata, 3)
         ## Execute A*
-        costmap=self.calc_costmap(self.cspacedata,5)
+        costmap = self.calc_costmap(self.cspacedata, 5)
+        
         start = PathPlanner.world_to_grid(mapdata, msg.start.pose.position)
         goal  = PathPlanner.world_to_grid(mapdata, msg.goal.pose.position)
+        
         AstarData  = self.a_star(self.cspacedata,costmap,start, goal)
-        path=AstarData[0]
-        success=AstarData[1]
+        path = AstarData[0]
+        
+        success = AstarData[1]
+        cost = AstarData[2]
+        
+        rospy.loginfo(cost)
+        
         self.pub_PathSuccess.publish(success)
-        if(success==False):
+        self.pub_PathCost.publish(cost)
+        
+        if(success == False or self.planState == 'Cost'):
             return Path()
         ## Optimize waypoints
         waypoints = PathPlanner.optimize_path(path)
+        
         ## Return a Path message
-        self.waypointsOpt=self.string_puller(costmap,waypoints)
+        self.waypointsOpt = self.string_puller(costmap,waypoints)
+        
         # self.path_to_message_altTopic(mapdata,self.waypointsOpt)
         return self.path_to_message(mapdata, self.waypointsOpt)
 

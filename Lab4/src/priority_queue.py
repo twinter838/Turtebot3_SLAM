@@ -21,12 +21,16 @@ class PriorityQueue:
         :param priority [int or float] The priority.
         """
         for i in range(0, len(self.elements)):
+            
             it = self.elements[i]
             if (it[1] == element):
+            
                 if (it[0] > priority):
                     self.elements[i] = (priority, element)
                     heapq.heapify(self.elements)
+            
                 return
+        
         heapq.heappush(self.elements, (priority, element))
 
     def get(self):
@@ -38,5 +42,5 @@ class PriorityQueue:
     def get_queue(self):
         """
         Returns the content of the queue as a list.
-	"""
+    	"""
         return self.elements

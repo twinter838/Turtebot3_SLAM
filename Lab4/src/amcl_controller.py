@@ -26,10 +26,15 @@ class amcl_controller:
         rospy.sleep(1.0)
 
     def update_AMCL_odom(self,msg):
+        """
+        Saves the current AMCL odom as a variable for easy access
+        """
         self.AMCL_odom=msg
     
     def calculate_covariance(self):
-
+        """
+        Calculates the average covariance from a PoseWithCovrienceStamped message
+        """
         rospy.loginfo("######## Calculating Covariance...")
         cov_x = self.AMCL_odom.pose.covariance[0]
         cov_y = self.AMCL_odom.pose.covariance[7]
@@ -39,13 +44,16 @@ class amcl_controller:
 
         return cov
     def run(self):
+        # Block until 
         rospy.wait_for_message('/amcl_pose',PoseWithCovarianceStamped)   
         self.pub_robot_state.publish("Localization")
         
         rospy.loginfo("Initalizing Localization")
         self.pub_robot_state.publish("Localization")
+        # AMCL service call
         self.runLocalizaiton()
         rospy.sleep(0.5)
+        # Spin the robot until covariance drops below a specific value
         while(self.calculate_covariance()>0.01):  
             rospy.sleep(0.1)
         self.pub_robot_state.publish("Localized")

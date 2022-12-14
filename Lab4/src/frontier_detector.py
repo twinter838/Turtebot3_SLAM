@@ -9,7 +9,7 @@ from path_planner import PathPlanner
 from std_msgs.msg import String,Empty
 from priority_queue import PriorityQueue
 from std_srvs.srv import Empty,SetBool
-from std_msgs.msg import Bool,Empty
+from std_msgs.msg import Bool,Empty,Int32
 from nav_msgs.msg import Odometry,Path
 class frontier_detector:
    
@@ -33,13 +33,15 @@ class frontier_detector:
         self.pub_Frontier = rospy.Publisher('/frontier_detector/frontier',OccupancyGrid, queue_size=10)
         self.pub_frontier_waypoint = rospy.Publisher('/frontier_detector/frontier_waypoint', PoseStamped, queue_size= 10)
         self.pub_robot_state=rospy.Publisher('robot_state',String, queue_size=10)
+        self.pub_path_state=rospy.Publisher('path_state',String, queue_size=10)
 
-        rospy.Subscriber('/path_planner/cspace_occgrid',OccupancyGrid,self.find_frontiers)
-        rospy.Subscriber('/drive/awaitingPath',Empty,self.detect_closest_centroid)
+        rospy.Subscriber('/path_planner/cspace_occgrid', OccupancyGrid, self.find_frontiers)
+        rospy.Subscriber('/drive/awaitingPath', Empty,self.detect_closest_centroid)
+        rospy.Subscriber('/path_planner/cost', Int32, self.update_cost)
         
         # request_frontier_centroid = rospy.service('frontier_centroid_service')
-        self.centroidOld=(0,0)
-        self.initialPosition=rospy.wait_for_message('/drive/currpose',PoseStamped)
+        self.centroidOld = (0,0)
+        self.initialPosition = rospy.wait_for_message('/drive/currpose',PoseStamped)
         rospy.loginfo("Frontier detector node ready")      
         rospy.sleep(1.0)
 
@@ -52,9 +54,13 @@ class frontier_detector:
         """
         ### REQUIRED CREDIT
         rospy.loginfo("Requesting the map")
-        mapdata=rospy.wait_for_message('/map',OccupancyGrid)
+        mapdata = rospy.wait_for_message('/map',OccupancyGrid)
         return mapdata
-
+    def update_cost(self,msg):
+        '''
+        Gets the cost of the current path being planned
+        '''
+        self.cost = msg.data
     def find_frontiers(self,mapdata):
         """
         Finds and returns frontiers
@@ -62,8 +68,8 @@ class frontier_detector:
         :return 
         """
         rospy.loginfo("Finding Frontiers")
-        self.map=mapdata
-        self.frontierData=self.find_boundary(mapdata)
+        self.map = mapdata
+        self.frontierData = self.find_boundary(mapdata)
         self.pub_Frontier.publish(self.frontierData)
         rospy.loginfo("Publishing Frontier Map")
 
@@ -80,11 +86,6 @@ class frontier_detector:
 
         """
 
-    #threshold map consider only walkable regions between known and unknown 
-
-    #edge detection
-
-
     #frontier centroid calculation
     def find_centroid(self,frontier_data):
         
@@ -92,22 +93,30 @@ class frontier_detector:
         c_x = 0
         c_y = 0
         n = len(frontier_data)
+
+        # variables to store actual centroid 
+        # (average of the x and y coordinates of all the points that  make the frontier)
+        
         avgX = 0
         avgY = 0
+        
         distOld = 100000
+
         for i in frontier_data:
             avgX += i[0]
             avgY += i[1]
-        avgX = avgX//n
-        avgY = avgY//n
-        ##just finds roughly the centroid based off of the given points found
+
+            
+        avgX = avgX // n
+        avgY = avgY // n
+
+        # finds the closest point to the calculated centroid in the frontier
         for i in frontier_data:
-            dist=PathPlanner.euclidean_distance(i[0],i[1],avgX,avgY)
-            if(distOld>dist):
-                distOld=dist
-                point=i
-        # # rospy.loginfo(frontier_data)
-        # point = frontier_data[n//2]
+            dist = PathPlanner.euclidean_distance(i[0], i[1], avgX, avgY)
+            if(distOld > dist):
+                distOld = dist
+                point = i
+      
         rospy.loginfo("Centroid Calc")
         rospy.loginfo(frontier_data)
         rospy.loginfo(avgX)
@@ -215,6 +224,13 @@ class frontier_detector:
         return centroids
 
     def detect_closest_centroid(self, msg):
+        """
+        Uses A* calls to find the centroid that is cheapest to path to. Paths the robot to the cheapest centroid
+        
+        """
+
+
+
         curr_pose = rospy.wait_for_message('/drive/currpose',PoseStamped)
         rospy.loginfo("Goal Request Recieved")
         current = PathPlanner.world_to_grid(self.map, curr_pose.pose.position)
@@ -264,7 +280,12 @@ class frontier_detector:
         # distances.sort
 
         # sorted_centroids = dict(sorted(centroids_and_distances.items(), key=lambda item: item[1]))
+        # self.pub_path_state.publish("Cost")
+        costOld = 1000000
+        walkablePath = False
         for centroid in centroids:
+            rospy.loginfo("Processing Centroids")
+
             closestCentroidPoint = centroid
             closestCentroid = PoseStamped()
             centroidPoint = PathPlanner.grid_to_world(self.map,closestCentroidPoint[0],closestCentroidPoint[1])
@@ -273,28 +294,29 @@ class frontier_detector:
             closestCentroid.pose.orientation = curr_pose.pose.orientation
             self.pub_frontier_waypoint.publish(closestCentroid)
             success = rospy.wait_for_message('/path_planner/success', Bool)
-            rospy.loginfo(success)
-            if success.data == True:
+            rospy.sleep(0.05)
+            rospy.loginfo(self.cost)
+            if (success.data == True):
                 rospy.loginfo("Valid path to a frontier found")
-                self.centroidOld=centroid
+                self.centroidOld = centroid
+                self.pub_frontier_waypoint.publish(closestCentroid)
+                costOld = self.cost
                 return True
-        
+                
+        self.pub_path_state.publish("Full")
+        rospy.sleep(0.05)
         # if(not success):
+        # if(walkablePath == False):
+        rospy.loginfo("No Walkable Paths found, returning")
         self.pub_robot_state.publish("Return")
         self.pub_frontier_waypoint.publish(self.initialPosition)
-
+        # elif(walkablePath == True):
+        #     rospy.loginfo("Publishing Full Waypoint")
+        #     self.pub_frontier_waypoint.publish(closestCentroidFinal)
                
  
  
-    # def isNotUsed(self, index):
-
-    #     for item in self.usedcentroids:
-    #          if(index == item):
-    #             return False
-
-    #     return True
-
-    
+   
 
     def find_boundary(self, mapdata):    
 
@@ -378,9 +400,9 @@ class frontier_detector:
         Check if it's reachable?
         """
         frontierMap = OccupancyGrid()
-        frontierMap.header=mapdata.header
-        frontierMap.info=mapdata.info
-        frontierMap.data=list(frontierData)
+        frontierMap.header = mapdata.header
+        frontierMap.info = mapdata.info
+        frontierMap.data = list(frontierData)
         return frontierMap
 
 
