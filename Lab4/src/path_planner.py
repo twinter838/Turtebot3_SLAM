@@ -251,7 +251,7 @@ class PathPlanner:
         self.pub_CSpaceOccGrid.publish(cspaceData)
         rospy.loginfo("Checking Path Validity")
 
-        if(not(self.path_still_walkable(cspaceData)) and len(self.waypointsOpt)>0):
+        if(not(self.path_still_walkable(cspaceData,cspaceData)) and len(self.waypointsOpt)>0):
             rospy.loginfo("Requesting New Path as old is invalid")
             rospy.sleep(2.5)
             self.requestNewPath()
@@ -482,7 +482,7 @@ class PathPlanner:
 
 
 
-    def string_puller(self,mapdata,path):
+    def string_puller(self,mapdata,costmap,path):
         """
         Takes a path on the grid and optimizes it using string pilling.
         :param path [[(int,int)]] The path on the grid (a list of tuples)
@@ -501,7 +501,7 @@ class PathPlanner:
                 rospy.loginfo(pathOpt)
                 return pathOpt
 
-            if(self.raycast(mapdata,pointPrev,future)):
+            if(self.raycast(mapdata,costmap,pointPrev,future)):
                 rospy.loginfo("Redundant Wapoint Removed")
             else:
                 pathOpt.append(point)
@@ -511,7 +511,7 @@ class PathPlanner:
 
 
 
-    def path_still_walkable(self,mapdata):
+    def path_still_walkable(self,mapdata,costmap):
         """
         Given a path, check if it is still valid using updated C-Space Data.
         :param path [[(int,int)]] The path on the grid (a list of tuples)
@@ -520,14 +520,14 @@ class PathPlanner:
         for index, point in enumerate(self.waypointsOpt):
             if(index+1<len(self.waypointsOpt)):
 
-                if(not (self.raycast(mapdata, point, self.waypointsOpt[index + 1]))):
+                if(not (self.raycast(mapdata,costmap, point, self.waypointsOpt[index + 1]))):
                    return False
             else:
                 return True
 
 
 
-    def raycast(self, mapdata, point1, point2):
+    def raycast(self, mapdata, costmap, point1, point2):
         """
         Checks if there is a clear LOS between two points on the grid        
         :param point1 (int,int) The first point on the grid(tuple)
@@ -575,15 +575,15 @@ class PathPlanner:
             indexX = 0
             for x in range(x1,x2):
                 y = y1 + indexX * slope
-                self.raycastList.append(PathPlanner.grid_to_world(mapdata, int(round(x)) ,int(round(y))))
-                raycastMsg.cells = self.raycastList
-                self.pub_Raycast.publish(raycastMsg)
+                # self.raycastList.append(PathPlanner.grid_to_world(mapdata, int(round(x)) ,int(round(y))))
+                # raycastMsg.cells = self.raycastList
+                # self.pub_Raycast.publish(raycastMsg)
                 indexX += 1
                 raycastLen += 1
                 if(not PathPlanner.is_cell_walkable(mapdata, int(round(x)), int(round(y)))):
                     # rospy.loginfo("LOS Blocked")
                     return False
-                favorability += mapdata.data[PathPlanner.grid_to_index(mapdata, int(round(x)), int(round(y)))]
+                favorability += costmap.data[PathPlanner.grid_to_index(mapdata, int(round(x)), int(round(y)))]
 
         elif(abs(dy) > abs(dx)):
             slope = dx/dy
@@ -598,11 +598,11 @@ class PathPlanner:
             for y in range(y1, y2):
                 x = x1 + (indexY * slope)
 
-                self.raycastList.append(PathPlanner.grid_to_world(mapdata,int(round(x)),int(round(y))))        
+                # self.raycastList.append(PathPlanner.grid_to_world(mapdata,int(round(x)),int(round(y))))        
                 
-                raycastMsg.cells = self.raycastList
+                # raycastMsg.cells = self.raycastList
                 
-                self.pub_Raycast.publish(raycastMsg)
+                # self.pub_Raycast.publish(raycastMsg)
                 
                 indexY += 1
                 raycastLen += 1
@@ -611,7 +611,7 @@ class PathPlanner:
                     # rospy.loginfo("LOS Blocked")
                     return False
 
-                favorability += mapdata.data[PathPlanner.grid_to_index(mapdata, int(round(x)), int(round(y)))]
+                favorability += costmap.data[PathPlanner.grid_to_index(mapdata, int(round(x)), int(round(y)))]
 
         if(favorability > 200):
             return False
@@ -713,7 +713,7 @@ class PathPlanner:
         waypoints = PathPlanner.optimize_path(path)
         
         ## Return a Path message
-        self.waypointsOpt = self.string_puller(costmap,waypoints)
+        self.waypointsOpt = self.string_puller(self.cspacedata,costmap,waypoints)
         
         # self.path_to_message_altTopic(mapdata,self.waypointsOpt)
         return self.path_to_message(mapdata, self.waypointsOpt)
